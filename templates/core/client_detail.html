@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{{ client.name }}{% endblock %}
+
+{% block extra_head %}
+<!-- Подключаем Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <!-- Информация о клиенте -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Информация о клиенте</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Имя:</strong> {{ client.name }}</p>
+                {% if client.email %}<p><strong>Email:</strong> {{ client.email }}</p>{% endif %}
+                {% if client.phone %}<p><strong>Телефон:</strong> {{ client.phone }}</p>{% endif %}
+                {% if client.birth_date %}<p><strong>Дата рождения:</strong> {{ client.birth_date|date:"d.m.Y" }}</p>{% endif %}
+                {% if client.notes %}<p><strong>Заметки:</strong> {{ client.notes|linebreaks }}</p>{% endif %}
+                <a href="{% url 'core:client_update' client.pk %}" class="btn btn-warning btn-sm">Редактировать</a>
+                <a href="{% url 'core:client_list' %}" class="btn btn-secondary btn-sm">К списку</a>
+            </div>
+        </div>
+
+        <!-- Прогресс задач -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Прогресс задач</h5>
+            </div>
+            <div class="card-body">
+                <p>Выполнено {{ completed_tasks }} из {{ total_tasks }} задач</p>
+                <div class="progress mb-3">
+                    <div class="progress-bar" role="progressbar" style="width: {{ task_progress_percent }}%;" aria-valuenow="{{ task_progress_percent }}" aria-valuemin="0" aria-valuemax="100">{{ task_progress_percent }}%</div>
+                </div>
+                <h6>Предстоящие задачи:</h6>
+                <ul class="list-group">
+                    {% for task in upcoming_tasks %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ task.title }} ({{ task.due_date|date:"d.m.Y H:i" }})
+                        <span class="badge {% if task.priority == 'high' %}bg-danger{% elif task.priority == 'medium' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ task.get_priority_display }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item">Нет предстоящих задач.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Цели клиента -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Цели клиента</h5>
+                <a href="{% url 'core:goal_create' client.pk %}" class="btn btn-sm btn-primary">Добавить цель</a>
+            </div>
+            <div class="card-body">
+                {% if goals %}
+                    {% for goal in goals %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <h6>{{ goal.title }}</h6>
+                                <small>до {{ goal.target_date|date:"d.m.Y"|default:"не указано" }}</small>
+                            </div>
+                            <p>{{ goal.description|truncatewords:20 }}</p>
+                            <div class="progress mb-2">
+                                <div class="progress-bar" role="progressbar" style="width: {{ goal.progress_percent }}%;" aria-valuenow="{{ goal.progress_percent }}" aria-valuemin="0" aria-valuemax="100">{{ goal.progress_percent }}%</div>
+                            </div>
+                            <div class="text-end">
+                                <a href="{% url 'core:goal_update' goal.pk %}" class="btn btn-sm btn-warning">Редактировать</a>
+                                <a href="{% url 'core:goal_delete' goal.pk %}" class="btn btn-sm btn-danger">Удалить</a>
+                            </div>
+                        </div>
+                        {% if not forloop.last %}<hr>{% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p>У клиента пока нет целей.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- Форма добавления отметки настроения -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Добавить отметку настроения</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'core:mood_add' client.pk %}">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="id_date" class="form-label">Дата</label>
+                            <input type="date" name="date" id="id_date" class="form-control" value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="id_mood_score" class="form-label">Оценка (1-10)</label>
+                            <input type="number" name="mood_score" id="id_mood_score" min="1" max="10" class="form-control" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="id_notes" class="form-label">Комментарий</label>
+                            <input type="text" name="notes" id="id_notes" class="form-control">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- История настроения в виде таблицы -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>История настроения (последние 30 дней)</h5>
+            </div>
+            <div class="card-body">
+                {% if mood_entries %}
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Оценка</th>
+                            <th>Комментарий</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in mood_entries %}
+                        <tr>
+                            <td>{{ entry.date|date:"d.m.Y" }}</td>
+                            <td>{{ entry.mood_score }}</td>
+                            <td>{{ entry.notes|default:"" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>Нет отметок настроения за последние 30 дней.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- График настроения -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>График настроения</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="moodChart" width="400" height="200"></canvas>
+                {% if not mood_data %}
+                <p class="text-muted text-center mt-3">Нет данных для отображения графика. Добавьте первую отметку настроения.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Данные для графика переданы из контекста как mood_data (список словарей с ключами date и mood_score)
+    const moodData = {{ mood_data|safe }};
+    console.log('Mood data:', moodData); // Отладочный вывод в консоль браузера
+
+    const dates = moodData.map(item => item.date);
+    const scores = moodData.map(item => item.mood_score);
+
+    const ctx = document.getElementById('moodChart').getContext('2d');
+    if (dates.length > 0) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Оценка настроения',
+                    data: scores,
+                    borderColor: 'rgba(255, 140, 0, 1)',
+                    backgroundColor: 'rgba(255, 140, 0, 0.2)',
+                    tension: 0.1,
+                    pointBackgroundColor: 'rgba(255, 140, 0, 1)',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 10,
+                        title: {
+                            display: true,
+                            text: 'Оценка'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Дата'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            }
+        });
+    } else {
+        // Если данных нет, можно скрыть canvas или оставить сообщение
+        ctx.canvas.style.display = 'none';
+    }
+</script>
+{% endblock %}

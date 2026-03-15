@@ -1,0 +1,43 @@
+python manage.py runserverpython manage.py runserver# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static_root/
+
+# Сборки
+dist/
+build/
+
+# Редакторы и IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Файлы с секретами
+.env
+*.env
+
+# Файлы тестового покрытия
+.coverage
+htmlcov/
+
+# Другие временные файлы
+*.DS_Store

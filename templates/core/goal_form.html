@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% if object %}Редактировать цель{% else %}Новая цель{% endif %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>{% if object %}Редактировать цель{% else %}Создать цель{% endif %}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <a href="{% if object %}{% url 'core:client_detail' pk=object.client.pk %}{% else %}{% url 'core:client_detail' pk=view.kwargs.client_pk %}{% endif %}" class="btn btn-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

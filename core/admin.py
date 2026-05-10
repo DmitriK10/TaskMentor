@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Client, Task, MoodEntry, Goal
+from .models import Client, Task, MoodEntry, Goal, PushSubscription, FCMToken, GoogleToken
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
@@ -23,3 +23,21 @@ class GoalAdmin(admin.ModelAdmin):
     list_display = ('title', 'client', 'target_date', 'created_at')
     list_filter = ('client',)
     search_fields = ('title', 'client__name')
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'endpoint', 'created_at')
+    list_filter = ('user',)
+    search_fields = ('endpoint', 'user__email')
+
+@admin.register(FCMToken)
+class FCMTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'token', 'device_name', 'created_at')
+    list_filter = ('user',)
+    search_fields = ('token', 'user__email', 'device_name')
+
+@admin.register(GoogleToken)
+class GoogleTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'created_at', 'updated_at')
+    list_filter = ('user',)
+    search_fields = ('user__email',)

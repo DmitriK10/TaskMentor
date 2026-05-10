@@ -86,6 +86,7 @@ class Task(models.Model):
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium', verbose_name='Приоритет')
     completed = models.BooleanField(default=False, verbose_name='Выполнена')
     reminder_sent = models.BooleanField(default=False, verbose_name='Напоминание отправлено')
+    google_event_id = models.CharField(max_length=255, blank=True, null=True, verbose_name='ID события в Google Calendar')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
 
     class Meta:
@@ -139,6 +140,10 @@ class NotificationSettings(models.Model):
         default=True,
         verbose_name='Получать email-уведомления'
     )
+    receive_push = models.BooleanField(
+        default=False,
+        verbose_name='Получать push-уведомления'
+    )
 
     class Meta:
         verbose_name = 'Настройки уведомлений'
@@ -172,11 +177,74 @@ class Goal(models.Model):
     def __str__(self):
         return f"{self.client.name} – {self.title}"
 
-    @property
-    def progress_percent(self):
-        """Возвращает процент выполнения цели на основе связанных задач."""
-        total = self.tasks.count()
-        if total == 0:
-            return 0
-        completed = self.tasks.filter(completed=True).count()
-        return int(completed / total * 100)
+    # Метод progress_percent удалён, так как дублирует логику из ClientAnalyticsService.
+    # Для получения прогресса цели используйте ClientAnalyticsService.get_goals_with_progress().
+
+
+class PushSubscription(models.Model):
+    """
+    Модель для хранения push-подписок пользователя.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+        verbose_name='Пользователь'
+    )
+    endpoint = models.URLField(max_length=500, verbose_name='Endpoint')
+    p256dh = models.CharField(max_length=200, verbose_name='p256dh')
+    auth = models.CharField(max_length=200, verbose_name='Auth')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Push-подписка'
+        verbose_name_plural = 'Push-подписки'
+        unique_together = ('user', 'endpoint')
+
+    def __str__(self):
+        return f'{self.user.email} - {self.endpoint[:30]}...'
+
+class FCMToken(models.Model):
+    """
+    Модель для хранения FCM-токенов мобильных устройств.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='fcm_tokens',
+        verbose_name='Пользователь'
+    )
+    token = models.CharField(max_length=500, verbose_name='FCM токен', unique=True)
+    device_name = models.CharField(max_length=100, blank=True, verbose_name='Название устройства')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'FCM токен'
+        verbose_name_plural = 'FCM токены'
+
+    def __str__(self):
+        return f'{self.user.email} - {self.token[:30]}...'
+
+class GoogleToken(models.Model):
+    """
+    Модель для хранения токенов доступа Google.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='google_token',
+        verbose_name='Google токен'
+    )
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Google токен'
+        verbose_name_plural = 'Google токены'
+
+    def __str__(self):
+        return f'Google token for {self.user.email}'

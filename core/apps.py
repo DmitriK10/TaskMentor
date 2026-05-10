@@ -6,3 +6,6 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         import core.signals
+        # Инициализируем сервис уведомлений и сохраняем в атрибуте приложения
+        from .services.base import create_notification_service
+        self.notification_service = create_notification_service()

@@ -41,3 +41,6 @@ htmlcov/
 
 # Другие временные файлы
 *.DS_Store
+
+# Оставляем .env.example
+!.env.example

@@ -29,6 +29,25 @@ urlpatterns = [
     path('goals/<int:pk>/update/', views.GoalUpdateView.as_view(), name='goal_update'),
     path('goals/<int:pk>/delete/', views.GoalDeleteView.as_view(), name='goal_delete'),
 
-    # Эндпоинт для EasyCron
+    # Push уведомления
+    path('push/subscribe/', views.subscribe, name='push_subscribe'),
+    path('push/vapid-key/', views.vapid_key, name='vapid_key'),
+    path('push/unsubscribe-all/', views.unsubscribe_all_push, name='unsubscribe_all_push'),
+
+    # Календарь
+    path('calendar/', views.CalendarView.as_view(), name='calendar'),
+    path('calendar/data/', views.calendar_data, name='calendar_data'),
+
+    # Google Calendar
+    path('google/auth/', views.google_calendar_auth, name='google_auth'),
+    path('google/callback/', views.google_calendar_callback, name='google_callback'),
+    path('google/disconnect/', views.google_calendar_disconnect, name='google_disconnect'),
+
+    # Эндпоинты для cron (защищены CRON_TOKEN, теперь только POST)
     path('cron/run-reminders/', views.run_reminders, name='cron_reminders'),
+    path('cron/reassign-tasks/', views.run_reassign, name='cron_reassign'),
+
+    # FCM
+    path('fcm/register/', views.register_fcm_token, name='fcm_register'),
+    path('fcm/unregister/', views.unregister_fcm_token, name='fcm_unregister'),
 ]

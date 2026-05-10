@@ -1,0 +1,3310 @@
+=== Файл: gen_correct_vapid.py ===
+import base64
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
+
+# Генерация новой пары ключей (исправлено: SECP256R1)
+private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+public_key = private_key.public_key()
+
+# Конвертация в raw base64url (без PEM-обёртки)
+def to_base64url_raw(key, is_private=False):
+    if is_private:
+        # Приватный ключ в raw виде (PKCS#8 без обёртки)
+        key_bytes = key.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+    else:
+        # Публичный ключ в raw виде (uncompressed point)
+        key_bytes = key.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint
+        )
+    return base64.urlsafe_b64encode(key_bytes).rstrip(b'=').decode()
+
+public_raw = to_base64url_raw(public_key)
+private_raw = to_base64url_raw(private_key, is_private=True)
+
+print("VAPID_PUBLIC_KEY =", public_raw)
+print("VAPID_PRIVATE_KEY =", private_raw)
+=== Конец файла gen_correct_vapid.py ===
+
+=== Файл: gen_keys.py ===
+import base64
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
+# Загружаем сгенерированные ключи
+with open('private_key.pem', 'rb') as f:
+    private_pem = f.read()
+private_key = serialization.load_pem_private_key(
+    private_pem,
+    password=None,
+    backend=default_backend()
+)
+
+with open('public_key.pem', 'rb') as f:
+    public_pem = f.read()
+public_key = serialization.load_pem_public_key(
+    public_pem,
+    backend=default_backend()
+)
+
+# Преобразуем в base64url
+def to_base64url(key, is_private=False):
+    if not is_private:
+        # Публичный ключ в формате uncompressed point
+        key_bytes = key.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint
+        )
+    else:
+        # Приватный ключ в PKCS#8 без шифрования
+        key_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+    return base64.urlsafe_b64encode(key_bytes).rstrip(b'=').decode()
+
+print("VAPID_PUBLIC_KEY =", to_base64url(public_key))
+print("VAPID_PRIVATE_KEY =", to_base64url(private_key, is_private=True))
+=== Конец файла gen_keys.py ===
+
+=== Файл: gen_vapid_keys.py ===
+# gen_vapid_keys.py
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
+import base64
+
+# Генерация ключей
+private_key = ec.generate_private_key(ec.SECP256r1(), default_backend())
+public_key = private_key.public_key()
+
+# Конвертация в base64url
+def to_base64url(key, is_private=False):
+    if is_private:
+        key_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+    else:
+        key_bytes = key.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint
+        )
+    return base64.urlsafe_b64encode(key_bytes).rstrip(b'=').decode()
+
+print("VAPID_PUBLIC_KEY =", to_base64url(public_key))
+print("VAPID_PRIVATE_KEY =", to_base64url(private_key, is_private=True))
+=== Конец файла gen_vapid_keys.py ===
+
+=== Файл: manage.py ===
+#!/usr/bin/env python
+"""Django's command-line utility for administrative tasks."""
+import os
+import sys
+
+
+def main():
+    """Run administrative tasks."""
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'taskmentor.settings')
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed and "
+            "available on your PYTHONPATH environment variable? Did you "
+            "forget to activate a virtual environment?"
+        ) from exc
+    execute_from_command_line(sys.argv)
+
+
+if __name__ == '__main__':
+    main()
+=== Конец файла manage.py ===
+
+=== Файл: passenger_wsgi.py ===
+import os
+import sys
+
+# Добавляем путь к проекту в sys.path
+project_dir = os.path.dirname(os.path.abspath(__file__))
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+
+# Указываем Django settings
+os.environ['DJANGO_SETTINGS_MODULE'] = 'taskmentor.settings'
+
+# Активируем виртуальное окружение
+activate_this = os.path.join(project_dir, 'venv/bin/activate_this.py')
+if os.path.exists(activate_this):
+    with open(activate_this) as f:
+        exec(f.read(), {'__file__': activate_this})
+
+# Запускаем WSGI-приложение
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
+=== Конец файла passenger_wsgi.py ===
+
+=== Файл: railway.json ===
+{
+  "crons": [
+    {
+      "schedule": "*/10 * * * *",
+      "command": "python manage.py send_task_reminders"
+    }
+  ]
+}
+=== Конец файла railway.json ===
+
+=== Файл: .env.example ===
+# Django secret key (сгенерируйте свой)
+SECRET_KEY=django-insecure-1234567890abcdefghijklmnopqrstuvwxyz
+
+# Debug mode
+DEBUG=True
+
+# Allowed hosts (через запятую)
+ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# Email settings (для продакшена)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=your-email@gmail.com
+
+# CSRF settings (для продакшена установите True)
+CSRF_COOKIE_SECURE=False
+
+# ---------- НОВОЕ: токен для EasyCron ----------
+CRON_TOKEN=zioSf1QjkTCcDhHH2C7EM0dr9jJj0hmrWbB_E9IOnHM
+=== Конец файла .env.example ===
+
+=== Файл: README.md ===
+# TaskMentor – Умный помощник для управления клиентами
+
+Веб-приложение для коучей, психологов, наставников и других специалистов, работающих с клиентами. Позволяет вести клиентскую базу, ставить задачи с приоритетами, отслеживать настроение и прогресс клиентов, получать уведомления (email, Web Push, FCM) и синхронизировать задачи с Google Calendar.
+
+## Функционал
+
+- Аутентификация – вход через Google OAuth 2.0 (django-allauth).
+- Управление клиентами – полный CRUD, контактные данные, заметки.
+- Управление задачами – создание, редактирование, удаление, привязка к клиенту и цели, приоритеты (высокий/средний/низкий), фильтрация по статусу, дате, клиенту.
+- Календарь задач – просмотр задач в виде календаря (FullCalendar) с возможностью перехода к редактированию.
+- Отметки настроения – ежедневная шкала 1–10, график динамики за 30 дней, средний балл.
+- Цели и прогресс – цели клиента с автоматическим расчётом процента выполнения на основе связанных задач.
+- Уведомления – email, Web Push (браузер) и Firebase Cloud Messaging (мобильные). Настройка типа уведомлений в профиле.
+- Адаптивный планировщик – автоматический перенос просроченных невыполненных задач на ближайшие свободные дни с учётом максимального количества задач в день (настраивается).
+- Интеграция с Google Calendar – создание, обновление и удаление событий в календаре пользователя при работе с задачами.
+- Напоминания – командой send_task_reminders (для cron) за час до срока выполнения.
+- Многопользовательский режим – каждый пользователь видит только своих клиентов и свои задачи.
+
+## Стек технологий
+
+Backend: Python 3.10+, Django 5.2, django-allauth
+База данных: SQLite (разработка), PostgreSQL (продакшен)
+Frontend: Bootstrap 5, FullCalendar, Chart.js
+Web Push: Service Worker, pywebpush, VAPID
+Mobile Push: Firebase Cloud Messaging (FCM), firebase-admin
+Google API: Google Calendar API v3, google-api-python-client, google-auth-oauthlib
+Сервер: Gunicorn + Whitenoise (статичные файлы)
+Деплой: Render / Railway / любой хостинг с поддержкой cron
+
+## Установка и запуск (локальная разработка)
+
+1. Клонирование репозитория
+   git clone https://github.com/yourusername/taskmentor.git
+   cd taskmentor
+
+2. Создание и активация виртуального окружения
+   python -m venv venv
+   source venv/bin/activate      # Linux / macOS
+   venv\Scripts\activate         # Windows
+
+3. Установка зависимостей
+   pip install -r requirements.txt
+
+4. Настройка переменных окружения
+   Создайте файл .env в корне проекта. Образец – .env.example.
+
+   Обязательные переменные:
+   SECRET_KEY=ваш-секретный-ключ
+   DEBUG=True
+   ALLOWED_HOSTS=127.0.0.1,localhost
+
+   # Google OAuth (для входа через Google)
+   GOOGLE_CLIENT_ID=ваш-google-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=ваш-google-client-secret
+
+   # Для Google Calendar API (те же значения, что выше)
+   GOOGLE_OAUTH2_CLIENT_ID=ваш-google-client-id
+   GOOGLE_OAUTH2_CLIENT_SECRET=ваш-google-client-secret
+
+   # Email (для напоминаний)
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=True
+   EMAIL_HOST_USER=ваша-почта@gmail.com
+   EMAIL_HOST_PASSWORD=пароль-приложения
+   DEFAULT_FROM_EMAIL=ваша-почта@gmail.com
+
+   # VAPID ключи для Web Push (сгенерировать командой python gen_correct_vapid.py)
+   VAPID_PUBLIC_KEY=...
+   VAPID_PRIVATE_KEY=...
+
+   # Для FCM (опционально)
+   FIREBASE_CREDENTIALS_PATH=полный-путь-к-файлу-сервис-аккаунта.json
+
+   # Токен для защищённых cron-эндпоинтов
+   CRON_TOKEN=случайная-длинная-строка
+
+   Где взять Google OAuth credentials?
+   - Перейдите в Google Cloud Console.
+   - Создайте проект, включите Google People API и Google Calendar API.
+   - В разделе «Credentials» создайте OAuth 2.0 Client ID для типа «Web application».
+   - Добавьте в «Authorized redirect URIs»:
+     http://127.0.0.1:8000/accounts/google/login/callback/
+     http://127.0.0.1:8000/core/google/callback/
+   - Скопируйте Client ID и Client Secret в .env.
+
+   Генерация VAPID ключей:
+   python gen_correct_vapid.py
+   Скопируйте вывод в .env (строки VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY).
+
+5. Применение миграций
+   python manage.py migrate
+
+6. Создание суперпользователя (для доступа в админку)
+   python manage.py createsuperuser
+
+7. Сбор статичных файлов (только для продакшена, в разработке не требуется)
+   python manage.py collectstatic
+
+8. Запуск сервера разработки
+   python manage.py runserver
+
+Приложение будет доступно по адресу http://127.0.0.1:8000.
+
+## Настройка дополнительных сервисов
+
+Push-уведомления (Web Push)
+- Убедитесь, что в .env заданы VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY.
+- В профиле пользователя включите переключатель «Push-уведомления» и разрешите уведомления в браузере.
+- При создании задачи с будущей датой и запуске команды send_task_reminders придёт браузерное уведомление.
+
+Firebase Cloud Messaging (мобильные уведомления)
+1. Создайте проект в Firebase Console.
+2. Добавьте веб-приложение и/или мобильное приложение.
+3. Скачайте файл сервис-аккаунта (Settings -> Service Accounts -> Generate new private key).
+4. Укажите путь к этому файлу в .env:
+   FIREBASE_CREDENTIALS_PATH=C:/полный/путь/к/firebase-key.json
+5. Мобильное приложение должно регистрировать FCM-токен через POST-запрос на /core/fcm/register/.
+
+Google Calendar синхронизация
+- После запуска сервера зайдите в профиль (/core/profile/) и нажмите «Подключить Google Calendar».
+- Разрешите доступ – после этого все создаваемые/редактируемые/удаляемые задачи будут автоматически синхронизироваться с календарём пользователя.
+
+## Запуск фоновых задач (cron)
+
+Для работы напоминаний и адаптивного планировщика используйте команды:
+
+python manage.py send_task_reminders
+python manage.py reassign_overdue_tasks
+
+Настройка cron (Linux/macOS):
+* * * * * cd /путь/к/проекту && python manage.py send_task_reminders
+0 0 * * * cd /путь/к/проекту && python manage.py reassign_overdue_tasks
+
+На Railway / аналогичных платформах используйте встроенные планировщики (например, railway.json).
+
+## Тестирование
+
+Запуск всех тестов:
+python manage.py test core
+
+Запуск тестов только для команд:
+python manage.py test core.tests.test_commands
+
+Покрытие тестами: модели, представления, формы, сервисы, команды.
+
+## Деплой (пример для Railway)
+
+1. Создайте проект на Railway, подключите GitHub-репозиторий.
+2. Добавьте переменные окружения (из .env) в панели Railway.
+3. Установите DATABASE_URL для PostgreSQL (Railway предоставит автоматически).
+4. Добавьте файл railway.json в корень проекта (пример уже есть).
+5. Убедитесь, что в settings.py для продакшена установлены:
+   - DEBUG = False
+   - ALLOWED_HOSTS содержит домен Railway.
+   - CSRF_TRUSTED_ORIGINS содержит https://*.railway.app.
+6. Запустите деплой – Railway выполнит collectstatic и migrate автоматически.
+
+## Лицензия
+
+Проект распространяется под лицензией MIT. Подробнее в файле LICENSE.
+
+## Разработчик
+
+Ваше имя – ваша почта
+Репозиторий: https://github.com/yourusername/taskmentor
+=== Конец файла README.md ===
+
+=== Файл: requirements.txt ===
+asgiref==3.11.1
+Django==5.2.11
+django-allauth==65.14.3
+python-decouple==3.8
+dj-database-url==3.1.2
+gunicorn==25.1.0
+psycopg2-binary==2.9.11
+whitenoise==6.11.0
+PyJWT==2.10.1
+firebase-admin==6.2.0
+pywebpush==1.14.1
+google-api-python-client==2.108.0
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+=== Конец файла requirements.txt ===
+
+=== Файл: push.js ===
+// static/js/push.js
+(async () => {
+    console.log('push.js started');
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.error('Push not supported by this browser');
+        return;
+    }
+
+    // 1. Регистрация Service Worker
+    const swUrl = window.SW_URL || '/static/js/sw.js';
+    let registration;
+    try {
+        registration = await navigator.serviceWorker.register(swUrl);
+        console.log('Service Worker registered:', swUrl);
+    } catch (err) {
+        console.error('Service Worker registration failed:', err);
+        return;
+    }
+
+    // 2. Проверка разрешения на уведомления
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+        permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') {
+        console.warn('Notification permission denied or not granted');
+        return;
+    }
+
+    // 3. Получение VAPID публичного ключа с сервера
+    let publicKey;
+    try {
+        const resp = await fetch('/core/push/vapid-key/');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        publicKey = data.key;
+        if (!publicKey || publicKey === '') {
+            throw new Error('VAPID key is empty');
+        }
+        console.log('VAPID key received, length:', publicKey.length);
+    } catch (err) {
+        console.error('Failed to get VAPID key:', err);
+        return;
+    }
+
+    // 4. Создание подписки
+    let subscription;
+    try {
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+        console.log('Push subscription created', subscription);
+    } catch (err) {
+        console.error('Push subscription failed:', err);
+        return;
+    }
+
+    // 5. Получение CSRF-токена из мета-тега (наиболее надёжный способ)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    console.log('CSRF token length:', csrfToken ? csrfToken.length : 'missing');
+
+    if (!csrfToken) {
+        console.error('CSRF token not found in meta tag');
+        return;
+    }
+
+    // 6. Отправка подписки на сервер
+    try {
+        const response = await fetch('/core/push/subscribe/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(subscription)
+        });
+        if (response.ok) {
+            console.log('Push subscription sent to server successfully');
+        } else {
+            const text = await response.text();
+            console.error('Server returned error:', response.status, text);
+        }
+    } catch (err) {
+        console.error('Failed to send subscription:', err);
+    }
+})();
+
+// Вспомогательные функции
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+=== Конец файла push.js ===
+
+=== Файл: asgi.py ===
+"""
+ASGI config for taskmentor project.
+
+It exposes the ASGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
+"""
+
+import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'taskmentor.settings')
+
+application = get_asgi_application()
+=== Конец файла asgi.py ===
+
+=== Файл: settings.py ===
+"""
+Django settings for taskmentor project.
+"""
+
+import os
+from pathlib import Path
+from decouple import config
+import dj_database_url
+
+# Принудительно отключаем проверку HTTPS для OAuth при локальной разработке
+if config('DEBUG', default=True, cast=bool):
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-default-key-change-me')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config('DEBUG', default=True, cast=bool)
+
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+
+# Application definition
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'django.contrib.sites',
+
+    'core',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+]
+
+ROOT_URLCONF = 'taskmentor.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'taskmentor.wsgi.application'
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
+        conn_max_age=600
+    )
+}
+
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+LANGUAGE_CODE = 'ru-ru'
+TIME_ZONE = 'Europe/Moscow'
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+SITE_ID = 1
+
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+        'OAUTH_PKCE_ENABLED': True,
+    }
+}
+
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+CSRF_COOKIE_HTTPONLY = False
+CSRF_USE_SESSIONS = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Email settings
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+    EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@localhost')
+
+# Security settings for production
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+else:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'http'
+
+CRON_TOKEN = config('CRON_TOKEN', default='')
+VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
+VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
+
+# Проверка CRON_TOKEN в продакшене
+if not DEBUG and not CRON_TOKEN:
+    raise ValueError("CRON_TOKEN must be set in production for cron endpoints security")
+
+# Google OAuth2 (для Calendar)
+GOOGLE_OAUTH2_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
+GOOGLE_OAUTH2_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET', default='')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'loggers': {
+        'core': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'allauth': {'handlers': ['console'], 'level': 'DEBUG'},
+    },
+}
+
+# Firebase (FCM)
+FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
+
+# Максимальное количество задач в день для адаптивного планировщика
+MAX_TASKS_PER_DAY = 5
+=== Конец файла settings.py ===
+
+=== Файл: urls.py ===
+from django.contrib import admin
+from django.urls import path, include
+from django.views.generic import TemplateView
+from core.views import index
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('accounts/', include('allauth.urls')),
+    path('core/', include('core.urls')),
+    path('', index, name='home'),
+    # Service Worker
+    path('sw.js', TemplateView.as_view(template_name='sw.js', content_type='application/javascript'), name='sw.js'),
+]
+=== Конец файла urls.py ===
+
+=== Файл: wsgi.py ===
+"""
+WSGI config for taskmentor project.
+
+It exposes the WSGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
+"""
+
+import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'taskmentor.settings')
+
+application = get_wsgi_application()
+=== Конец файла wsgi.py ===
+
+=== Файл: Экспертная оценка проекта TaskMentor_070426.docx ===
+**Экспертная оценка проекта TaskMentor**
+
+**Введение**
+
+Проведён анализ предоставленных файлов проекта **TaskMentor** --
+Django‑приложения для управления клиентами, задачами, трекинга
+настроения, целей и уведомлений. Анализ выполнен на основе:
+
+- Технического задания (ТЗ) из файла TaskMentor -Умный помощник для
+  управления клиентами (Django Web App).docx
+
+- Промежуточной проверки Оценка текущего состояния и план
+  доработок230326.docx
+
+- Принципов SOLID
+
+- Предоставленного кода (бэкенд, сервисы, тесты, настройки, статические
+  JS‑файлы)
+
+HTML‑шаблоны не анализировались, так как будут представлены отдельно.
+
+------------------------------------------------------------------------
+
+**1. Общее соответствие требованиям ТЗ**
+
+**1.1 Функциональные требования**
+
+  ----------------------------------------------------------------------------------------
+  Требование         Реализация                                                Статус
+  ------------------ --------------------------------------------------------- -----------
+  Вход через Google  django-allauth с провайдером Google. Настроено            ✅
+  Sign‑In (OAuth     в settings.py, urls.py включает allauth.urls.             Полностью
+  2.0)                                                                         
+
+  Создание,          Task модель, CRUD представления                           ✅
+  редактирование,    (TaskCreateView, TaskUpdateView, TaskDeleteView).         
+  удаление задач                                                               
+
+  Адаптивный         Команда reassign_overdue_tasks с                          ✅
+  планировщик        учётом MAX_TASKS_PER_DAY. Вызывается по cron.             
+  (перенос                                                                     
+  просроченных                                                                 
+  задач)                                                                       
+
+  Привязка задачи к  Поле client в модели Task.                                ✅
+  клиенту                                                                      
+
+  Настройка          Модель NotificationSettings, форма в профиле.             ✅
+  уведомлений                                                                  
+
+  Push‑уведомления   pywebpush, модель PushSubscription,                       ⚠️ Частично
+  Web Push           эндпоинты /push/subscribe/, /push/vapid-key/. Клиентская  
+                     часть -- push.js (требует доработки).                     
+
+  Push‑уведомления   Модель FCMToken, сервис FCMService,                       ✅
+  Mobile (FCM)       эндпоинты /fcm/register/, /fcm/unregister/.               
+
+  Трекинг настроения Модель MoodEntry, форма добавления, график                ✅
+  (ежедневная шкала) в client_detail.                                          
+
+  Визуальный трекер  График настроения (Chart.js), прогресс‑бар выполнения     ✅
+  прогресса          задач и целей.                                            
+
+  Привязка прогресса Модель Goal, расчёт прогресса                             ✅
+  к целям клиента    через ClientAnalyticsService.get_goals_with_progress().   
+
+  Адаптивный         Bootstrap 5 в шаблонах (не проверялось, но                ✅
+  интерфейс под ПК и предполагается).                                          
+  мобилку                                                                      
+
+  Оранжевая цветовая Указано в ТЗ, реализовано через Bootstrap                 ✅
+  тема               (предположительно).                                      
+  ----------------------------------------------------------------------------------------
+
+**Вывод**: Все основные функциональные требования ТЗ выполнены, за
+исключением небольшой доработки клиентской части Web Push (см. раздел
+4).
+
+**1.2 Нефункциональные требования**
+
+  -------------------------------------------------------------------------
+  Требование             Реализация                                Статус
+  ---------------------- ----------------------------------------- --------
+  Django 5.2             Django==5.2.11 в requirements.txt         ✅
+
+  СУБД SQLite            dj_database_url с                         ✅
+  (разработка) /         дефолтом sqlite:///\.... Поддержка        
+  PostgreSQL (продакшен) PostgreSQL через psycopg2-binary.         
+
+  Frontend: HTML/CSS +   Bootstrap 5 подключён (предположительно   ✅
+  JS (Bootstrap)         в base.html).                             
+
+  Firebase для mobile    firebase-admin, FCMService.               ✅
+  push                                                             
+
+  Web Push API           pywebpush, VAPID ключи.                   ✅
+
+  Интеграция с Google    django-allauth + отдельный OAuth2 для     ✅
+  OAuth                  Calendar.                                 
+
+  Адаптивный интерфейс   Bootstrap 5.                              ✅
+  -------------------------------------------------------------------------
+
+**Вывод**: Нефункциональные требования также выполнены.
+
+------------------------------------------------------------------------
+
+**2. Анализ архитектуры и соблюдение SOLID**
+
+Проект демонстрирует **хорошее следование принципам SOLID**, особенно в
+слое сервисов.
+
+**2.1 Принцип единственной ответственности (SRP)**
+
+- **Модели** (core/models.py) -- только определение данных и базовые
+  методы (get_task_stats, get_upcoming_tasks). Бизнес‑логика вынесена в
+  сервисы.
+
+- **Представления** (core/views.py) -- только обработка HTTP‑запросов,
+  маршрутизация, вызов сервисов.
+
+- **Сервисы**:
+
+  - TaskService -- управление задачами (создание, обновление, удаление,
+    синхронизация с календарём).
+
+  - ClientAnalyticsService -- расчёт статистики и аналитики по клиенту.
+
+  - CalendarService -- работа с Google Calendar API.
+
+  - GoogleOAuthService -- OAuth2 для календаря.
+
+  - FCMService -- отправка через Firebase.
+
+  - NotificationService (в base.py) -- фасад для уведомлений.
+
+- **Команды** (send_task_reminders, reassign_overdue_tasks) -- каждая
+  делает одно дело.
+
+**Оценка**: SRP соблюдён.
+
+**2.2 Принцип открытости/закрытости (OCP)**
+
+- **Уведомления**: NotificationService принимает список каналов
+  (EmailChannel, PushChannel, FCMChannel). Новый канал (например, SMS)
+  можно добавить без изменения существующего кода -- достаточно
+  реализовать NotificationChannel protocol.
+
+- **Аналитика**: ClientAnalyticsService можно расширить новыми методами,
+  не трогая существующие.
+
+- **Календарь**: CalendarService абстрагирован от OAuth.
+
+**Оценка**: OCP соблюдён.
+
+**2.3 Принцип подстановки Лисков (LSP)**
+
+- Используется protocol NotificationChannel -- любой класс с
+  методами send и is_enabled_for_user подставляется
+  в NotificationService.
+
+- Наследование не злоупотребляется (нет глубоких иерархий).
+
+**Оценка**: LSP соблюдён.
+
+**2.4 Принцип разделения интерфейсов (ISP)**
+
+- Интерфейсы узкие: NotificationChannel требует всего два метода.
+
+- Сервисы не зависят от методов, которые не используют.
+
+**Оценка**: ISP соблюдён.
+
+**2.5 Принцип инверсии зависимостей (DIP)**
+
+- NotificationService зависит от абстракции NotificationChannel, а не от
+  конкретных классов.
+
+- TaskService принимает notification_service через конструктор (инъекция
+  зависимости).
+
+- CalendarService не создаёт GoogleToken внутри, а получает извне
+  через \_\_init\_\_.
+
+**Оценка**: DIP соблюдён.
+
+**Итог по SOLID**: проект **отлично спроектирован** с точки зрения
+SOLID, что делает его легко расширяемым и тестируемым.
+
+------------------------------------------------------------------------
+
+**3. Детальный разбор ключевых компонентов**
+
+**3.1 Модели данных (core/models.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\models.py
+
+**Плюсы**:
+
+- Правильные связи (ForeignKey, OneToOneField, unique_together).
+
+- Использование related_name для удобных обратных связей.
+
+- Поля created_at, updated_at для аудита.
+
+- Методы get_task_stats, get_upcoming_tasks -- полезные, но не нарушают
+  SRP (это данные модели).
+
+**Минусы / замечания**:
+
+- В модели Goal закомментирован метод progress_percent -- это правильно,
+  так как логика вынесена в сервис. Но комментарий указывает
+  на ClientAnalyticsService.get_goals_with_progress() -- это хорошее
+  решение.
+
+- Поле google_event_id в Task -- корректно.
+
+- PushSubscription имеет unique_together = (\'user\', \'endpoint\') --
+  правильно.
+
+**Рекомендации**:
+
+- Добавить db_index=True на часто фильтруемые
+  поля: Task.due_date, Task.completed, MoodEntry.date, Goal.target_date.
+
+- Рассмотреть возможность
+  использования DateTimeField(auto_now_add=True) и auto_now -- уже есть.
+
+**3.2 Представления (core/views.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\views.py
+
+**Плюсы**:
+
+- Использование LoginRequiredMixin для защиты.
+
+- Разделение на классы и функции.
+
+- Применение ClientAnalyticsFacade для получения контекста деталей
+  клиента.
+
+- TaskCreateView и TaskUpdateView используют TaskService, а не прямую
+  работу с моделью.
+
+- Эндпоинты для cron защищены токеном.
+
+**Минусы / замечания**:
+
+- В TaskCreateView.form_valid создаётся задача через TaskService, но
+  затем вызывается redirect, а не super().form_valid(). Это нормально,
+  но требует явного указания success_url.
+
+- В TaskUpdateView аналогично.
+
+- toggle_task_complete -- использует TaskService.toggle_complete, но не
+  синхронизирует с календарём (изменение статуса не влияет на событие в
+  календаре -- это допустимо).
+
+- google_calendar_auth и callback используют GoogleOAuthService, но код
+  внутри callback создаёт Flow напрямую, а не через сервис -- это
+  небольшое нарушение инкапсуляции. Лучше вынести получение токенов в
+  метод сервиса.
+
+**Рекомендации**:
+
+- В google_calendar_callback переиспользовать
+  метод GoogleOAuthService.fetch_and_save_tokens, а не
+  создавать Flow вручную. Сейчас
+  метод fetch_and_save_tokens принимает request и flow, но не
+  создаёт flow сам. Можно доработать.
+
+- Добавить обработку ошибок при
+  отсутствии GOOGLE_OAUTH2_CLIENT_ID в settings.py -- уже есть проверка
+  в GoogleOAuthService.\_\_init\_\_.
+
+**3.3 Сервисы**
+
+**3.3.1 Базовая архитектура уведомлений (core/services/base.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\services\\base.py
+
+**Оценка**: Эталонная реализация SOLID.
+
+- NotificationPayload -- иммутабельный DTO.
+
+- NotificationChannel -- protocol.
+
+- EmailChannel, PushChannel, FCMChannel -- каждый отвечает за свой
+  канал.
+
+- NotificationService -- фасад, собирающий каналы.
+
+- Фабрика create_notification_service создаёт стандартную конфигурацию.
+
+**Единственный недочёт**: В
+методе notify_task_reminder используется self.\_format_task_message --
+форматирование жёстко задано. Для расширения можно вынести форматтер в
+отдельный класс или параметр.
+
+**3.3.2 Сервис задач (core/services/task_service.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\services\\task_service.py
+
+**Плюсы**:
+
+- Инкапсулирует создание, обновление, удаление.
+
+- Синхронизация с календарём вынесена в \_sync_calendar.
+
+- Использует GoogleOAuthService.is_connected для проверки.
+
+**Минусы**:
+
+- При создании задачи отправляется уведомление только если due_date \>
+  timezone.now(). Но для задач, созданных с прошедшей датой
+  (просроченных), уведомление не отправляется -- это логично. Однако
+  можно добавить отправку уведомления о просрочке.
+
+- Метод toggle_complete не синхронизирует с календарём -- изменение
+  статуса не влияет на событие. По ТЗ это не требуется, но можно
+  добавить опционально (например, отметить событие как выполненное).
+
+**3.3.3 Сервис аналитики клиента
+(core/services/client_analytics_service.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\services\\client_analytics_service.py
+
+**Плюсы**:
+
+- Использование DTO (TaskStatistics, MoodAnalytics, UpcomingTask).
+
+- ClientAnalyticsFacade для подготовки контекста шаблона.
+
+- Чёткое разделение: расчёт метрик и подготовка для представления.
+
+**Минусы**:
+
+- В get_mood_analytics параметр days ограничивает количество записей, но
+  в entries_queryset не применяется \[:days\] -- применяется позже
+  при list(entries_queryset\[:days\]). Это нормально.
+
+- average_mood вычисляется через aggregate, но для пустого набора
+  возвращает None -- корректно.
+
+**3.3.4 Сервис Google Calendar (core/services/calendar_service.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\services\\calendar_service.py
+
+**Плюсы**:
+
+- Адаптер \_requests_request_with_body для совместимости с google-auth.
+
+- Обновление истёкшего токена с сохранением в БД.
+
+- Методы create_event, update_event, delete_event.
+
+**Минусы**:
+
+- В \_build_service при обновлении токена
+  используется token_obj.save(update_fields=[\'access_token\',
+  \'expires_at\']), но refresh_token не обновляется (Google не выдаёт
+  новый refresh_token при обновлении). Это нормально.
+
+- При ошибке обновления токен удаляется (token_obj.delete()) --
+  корректно, пользователь должен переподключиться.
+
+**3.4 Управляющие команды**
+
+**Полные пути**:
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\management\\commands\\send_task_reminders.py
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\management\\commands\\reassign_overdue_tasks.py
+
+**Оценка**:
+
+- Обе команды используют select_related для оптимизации.
+
+- send_task_reminders получает notification_service из apps.get_app_config(\'core\').notification_service --
+  правильно.
+
+- reassign_overdue_tasks учитывает MAX_TASKS_PER_DAY из настроек,
+  сортирует по приоритету, обрабатывает каждого пользователя независимо.
+
+**Минусы**:
+
+- В reassign_overdue_tasks дата переноса устанавливается на 10:00 UTC --
+  это жёстко. Лучше вынести в настройки (TASK_DEFAULT_HOUR).
+
+- Команда не отправляет уведомление о переносе задачи -- это было бы
+  полезно.
+
+**3.5 Тесты**
+
+**Полные пути**:
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\tests\\test_commands.py
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\tests\\test_services.py
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\core\\tests\\test_views.py
+
+**Плюсы**:
+
+- Хорошее покрытие: модели, представления, команды, сервисы.
+
+- Использование моков (@patch, MagicMock).
+
+- Тесты для cron-эндпоинтов с проверкой токена.
+
+**Минусы**:
+
+- Нет тестов для FCMService (отправка, регистрация, удаление). Хотя
+  в test_services.py есть тесты для NotificationService,
+  но FCMChannel не тестируется из‑за зависимости от внешней Firebase.
+
+- Нет тестов для CalendarService с реальными вызовами API (только моки).
+  Это допустимо.
+
+- В test_views.py тест test_cron_endpoint_with_valid_token_in_header использует self.client.get,
+  но
+  эндпоинт run_reminders ожидает GET (в urls.py указан path(\'cron/run-reminders/\',
+  views.run_reminders) -- это GET). Это нормально, но обычно cron
+  эндпоинты делают POST. Рекомендуется изменить на POST для
+  безопасности.
+
+**3.6 Настройки проекта (taskmentor/settings.py)**
+
+**Полный
+путь**: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\taskmentor\\settings.py
+
+**Плюсы**:
+
+- Использование python-decouple для переменных окружения.
+
+- Поддержка dj_database_url.
+
+- Настройки безопасности для продакшена (при DEBUG=False).
+
+- STATICFILES_STORAGE =
+  \'whitenoise.storage.CompressedManifestStaticFilesStorage\'.
+
+- Логирование настроено.
+
+**Минусы / несоответствия**:
+
+- В settings.py переменные для Google OAuth2
+  называются GOOGLE_OAUTH2_CLIENT_ID и GOOGLE_OAUTH2_CLIENT_SECRET. В
+  предоставленном файле .env есть обе
+  пары: GOOGLE_CLIENT_ID и GOOGLE_OAUTH2_CLIENT_ID. Это может вызвать
+  путаницу. Рекомендуется использовать единое имя --
+  например, GOOGLE_OAUTH2_CLIENT_ID и GOOGLE_OAUTH2_CLIENT_SECRET,
+  а GOOGLE_CLIENT_ID оставить для allauth (если он используется
+  отдельно). В текущем коде allauth использует свои настройки
+  из SOCIALACCOUNT_PROVIDERS,
+  а CalendarService берёт GOOGLE_OAUTH2_CLIENT_ID. В .env есть обе
+  переменные -- это нормально, но в .env.example указаны
+  только GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET. **Необходимо привести
+  документацию и пример **.env** в соответствие.**
+
+- CSRF_COOKIE_SECURE по умолчанию False -- для разработки ок, но в
+  продакшене должно быть True. В коде есть if not DEBUG: \...
+  CSRF_COOKIE_SECURE = True, но
+  в .env переменная CSRF_COOKIE_SECURE переопределяет? Лучше убрать её
+  из .env и полагаться на логику DEBUG.
+
+- VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY читаются из .env, но
+  в .env.example их нет. Добавить.
+
+**3.7 Клиентская часть Web Push**
+
+**Файлы**:
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\static\\js\\push.js
+
+- C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\static\\js\\sw.js
+
+**Анализ**:
+
+- push.js -- полная реализация: регистрация Service Worker, запрос
+  разрешения, получение VAPID ключа, подписка, отправка на сервер. **Всё
+  корректно**. В промежуточной проверке говорилось, что push.js пустой
+  -- но в предоставленном файле он полностью заполнен. Возможно, это
+  обновлённая версия.
+
+- sw.js -- обработка push-событий и кликов. Есть.
+
+- В base.html (не предоставлен) должно быть подключение push.js для
+  аутентифицированных пользователей. Предполагается, что это есть.
+
+**Вывод**: Клиентская часть Web Push **реализована полностью**.
+Промежуточная проверка устарела.
+
+**3.8 Маршруты и интеграции**
+
+**Главный **urls.py: C:\\Users\\ADATA\\Documents\\GitHub\\Taskmentor\\taskmentor\\urls.py --
+подключает allauth, core.urls, корневой маршрут на index.
+
+core/urls.py: все эндпоинты приложения,
+включая /cron/run-reminders/, /cron/reassign-tasks/, /push/\*, /fcm/\*, /google/\*.
+
+**Замечания**:
+
+- Эндпоинты для cron -- GET. Лучше сделать POST, чтобы предотвратить
+  случайный вызов из браузера. Но с токеном в
+  заголовке Authorization это безопасно.
+
+- В views.run_reminders и run_reassign проверка токена
+  через request.headers.get(\'Authorization\').
+  В railway.json cron-задание использует команду python manage.py
+  send_task_reminders, а не HTTP‑вызов. Это два разных подхода. В
+  проекте предусмотрены оба: можно вызывать команду напрямую или через
+  HTTP с токеном. Это гибко.
+
+------------------------------------------------------------------------
+
+**4. Проблемы и несоответствия (с учётом промежуточной проверки)**
+
+Промежуточная проверка (Оценка текущего состояния и план
+доработок230326.docx) указала на следующие недочёты:
+
+1.  **Push-уведомления** -- клиентская часть отсутствует или неполная.\
+    **Факт**: в предоставленных файлах push.js и sw.js реализованы
+    полностью. Возможно, проверка проводилась на более ранней
+    версии. **Сейчас проблема решена**.
+
+2.  **Google Calendar в интерфейсе** -- кнопка не выведена на страницу
+    профиля.\
+    **Факт**: в views.py есть ProfileView, который
+    рендерит profile.html. HTML‑файл не предоставлен, но судя по коду
+    представления, он отображает форму NotificationSettingsForm. Блок
+    для Google Calendar **отсутствует** в описании контекста.
+    В ProfileView нет передачи google_connected в контекст. Однако
+    в CalendarView она передаётся. Для профиля нужно добавить.\
+    **Рекомендация**: расширить ProfileView, добавив в
+    контекст google_connected =
+    GoogleOAuthService.is_connected(self.request.user), и в шаблоне
+    отобразить кнопку.
+
+3.  **Настройка для продакшена** -- не хватает
+    переменных GOOGLE_OAUTH2_CLIENT_ID/SECRET.\
+    **Факт**: в .env они есть, в .env.example -- нет. **Необходимо
+    обновить **.env.example.
+
+4.  **Service Worker** -- не зарегистрирован.\
+    **Факт**: регистрация происходит в push.js. Если push.js подключён
+    в base.html -- всё работает.
+
+5.  **Тестирование** -- добавить тесты для новых функций.\
+    **Факт**: тесты для push и календаря присутствуют
+    (в test_services.py и test_views.py). Но нет тестов
+    для FCMService. **Рекомендуется добавить**.
+
+6.  **Документация** -- дополнить README.\
+    **Факт**: README.md содержит разделы по установке, настройке OAuth,
+    VAPID, Firebase, cron. Но нет раздела по Google Calendar OAuth (куда
+    добавлять redirect URI). **Добавить**.
+
+7.  **Деплой** -- проверить Procfile, railway.json, passenger_wsgi.py.\
+    **Факт**:
+
+    - Procfile не предоставлен в файлах (но в корне проекта по
+      списку files.txt есть Procfile). В анализе он отсутствует. Нужно
+      убедиться, что он существует и содержит web: gunicorn
+      taskmentor.wsgi.
+
+    - railway.json есть, cron \*/10 \* \* \*
+      \* вызывает send_task_reminders. Это нормально.
+
+    - passenger_wsgi.py есть, настроен для Passenger (не для Railway).
+      Для Railway он не нужен.
+
+------------------------------------------------------------------------
+
+**5. Рекомендации по исправлению и улучшению**
+
+**5.1 Срочные исправления (критические для продакшена)**
+
+1.  **Добавить в **ProfileView** контекст с **google_connected\
+    Файл: core/views.py, класс ProfileView.
+
+python
+
+def get_context_data(self, \*\*kwargs):
+
+context = super().get_context_data(\*\*kwargs)
+
+context[\'google_connected\'] =
+GoogleOAuthService.is_connected(self.request.user)
+
+return context
+
+2.  **Обновить **.env.example -- добавить переменные:
+
+text
+
+GOOGLE_OAUTH2_CLIENT_ID=your-client-id.apps.googleusercontent.com
+
+GOOGLE_OAUTH2_CLIENT_SECRET=your-client-secret
+
+VAPID_PUBLIC_KEY=your_vapid_public_key
+
+VAPID_PRIVATE_KEY=your_vapid_private_key
+
+FIREBASE_CREDENTIALS_PATH=/path/to/serviceAccountKey.json
+
+MAX_TASKS_PER_DAY=5
+
+3.  **Убрать **CSRF_COOKIE_SECURE** из **.env -- пусть управляется
+    через DEBUG.
+
+4.  **Изменить cron‑эндпоинты на POST** для безопасности.\
+    В urls.py заменить path(\'cron/run-reminders/\',
+    views.run_reminders) на path(\'cron/run-reminders/\',
+    views.run_reminders, name=\'cron_reminders\') и в views.py добавить
+    декоратор @require_POST. Аналогично для run_reassign. При этом
+    в railway.json нельзя будет использовать HTTP‑вызов, только команду.
+    Либо оставить GET, но добавить проверку IP или секретного заголовка
+    -- текущая проверка Bearer токена достаточна.
+
+**5.2 Рекомендации по улучшению качества**
+
+1.  **Добавить тесты для **FCMService\
+    Создать test_fcm_service.py с моками firebase_admin.messaging.
+
+2.  **Вынести магическое число 10:00 в настройки**\
+    В reassign_overdue_tasks.py заменить timedelta(hours=10) на settings.TASK_DEFAULT_HOUR.
+
+3.  **Добавить уведомление о переносе задачи**\
+    В reassign_overdue_tasks после переноса отправить push/email
+    пользователю.
+
+4.  **Улучшить **GoogleOAuthService -- вынести создание Flow в отдельный
+    метод, чтобы callback не создавал его вручную.
+
+5.  **Добавить индексы в модели** -- см. раздел 3.1.
+
+6.  **Добавить обработку ошибок при отсутствии VAPID ключей** --
+    сейчас send_push_notification логирует ошибку, но не возвращает
+    осмысленный результат. Хорошо.
+
+**5.3 Документация**
+
+- В README.md добавить подраздел **\"Настройка Google Calendar
+  OAuth\"** с указанием правильных redirect URIs:
+
+  - http://127.0.0.1:8000/core/google/callback/ (для разработки)
+
+  - https://yourdomain.com/core/google/callback/ (для продакшена)
+
+- Добавить инструкцию по генерации VAPID ключей (python
+  gen_correct_vapid.py).
+
+- Указать, что для FCM нужно скачать service account key и указать путь
+  в .env.
+
+------------------------------------------------------------------------
+
+**6. Итоговая оценка**
+
+**6.1 Соответствие ТЗ**
+
+  -----------------------------------------------------------------------
+  Категория                       Оценка
+  ------------------------------- ---------------------------------------
+  Аутентификация Google           100%
+
+  Управление клиентами            100%
+
+  Управление задачами +           100%
+  адаптивный планировщик          
+
+  Уведомления (email, Web Push,   95% (мелкие доработки интерфейса)
+  FCM)                            
+
+  Трекинг настроения              100%
+
+  Визуальный трекер прогресса     100%
+
+  Цели и прогресс                 100%
+
+  Интеграция с Google Calendar    100% (бэкенд) / 90% (интерфейс --
+                                  отсутствует кнопка в профиле)
+
+  Документация                    80% (требует дополнения)
+
+  Тесты                           85% (не хватает FCM)
+
+  SOLID                           95%
+  -----------------------------------------------------------------------
+
+**Общая готовность MVP**: **90%**. После добавления кнопки Google
+Calendar в профиль и обновления документации -- **95%**. Проект можно
+разворачивать и тестировать с реальными пользователями.
+
+**6.2 Сильные стороны**
+
+- Чистая архитектура, строгое соблюдение SOLID.
+
+- Полная поддержка трёх каналов уведомлений (email, web push, FCM).
+
+- Гибкий адаптивный планировщик.
+
+- Качественные тесты (покрытие основных сценариев).
+
+- Готовность к деплою на Railway / Render.
+
+**6.3 Слабые стороны (требуют внимания)**
+
+- Отсутствие блока Google Calendar в профиле (легко исправить).
+
+- Неполный .env.example и документация.
+
+- Нет тестов для FCM.
+
+- Cron‑эндпоинты используют GET (не критично, но лучше POST).
+
+**6.4 Заключение**
+
+**Проект TaskMentor представляет собой профессионально разработанное
+Django‑приложение, соответствующее требованиям MVP. Рекомендуется
+выполнить указанные доработки (особенно пункты 5.1.1 и 5.1.2) и
+выкатывать на продакшен.** Разработчик продемонстрировал глубокое
+понимание принципов SOLID, что обеспечивает лёгкую поддержку и
+расширение функционала в будущем (например, добавление новых каналов
+уведомлений, смена планировщика, интеграция с другими календарями).
+
+=== Конец файла Экспертная оценка проекта TaskMentor_070426.docx ===
+
+=== Файл: files.txt ===
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core
+C:\Users\ADATA\Documents\GitHub\Taskmentor\develop
+C:\Users\ADATA\Documents\GitHub\Taskmentor\main
+C:\Users\ADATA\Documents\GitHub\Taskmentor\static
+C:\Users\ADATA\Documents\GitHub\Taskmentor\staticfiles
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates
+C:\Users\ADATA\Documents\GitHub\Taskmentor\.env
+C:\Users\ADATA\Documents\GitHub\Taskmentor\manage.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\passenger_wsgi.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\private_key.pem
+C:\Users\ADATA\Documents\GitHub\Taskmentor\Procfile
+C:\Users\ADATA\Documents\GitHub\Taskmentor\public_key.pem
+C:\Users\ADATA\Documents\GitHub\Taskmentor\README.md
+C:\Users\ADATA\Documents\GitHub\Taskmentor\requirements.txt
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\__pycache__
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\management
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\services
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\__init__.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\admin.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\apps.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\forms.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\models.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\notification_service.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\signals.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\tests.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\urls.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\views.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\management\commands
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\management\commands\__pycache__
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\management\commands\send_task_reminders.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\management\commands\__pycache__\send_task_reminders.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__init__.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\0001_initial.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\0002_notificationsettings.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\0003_goal_task_goal.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\0004_task_reminder_sent.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\0005_notificationsettings_receive_push_and_more.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\__init__.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\__init__.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0001_initial.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0001_initial.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0002_notificationsettings.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0002_notificationsettings.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0003_goal_task_goal.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0003_goal_task_goal.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0004_task_reminder_sent.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0004_task_reminder_sent.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\migrations\__pycache__\0005_notificationsettings_receive_push_and_more.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\services\__pycache__
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\services\__init__.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\services\calendar_service.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\core\services\notification_service.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\staticfiles\images\icon.png
+C:\Users\ADATA\Documents\GitHub\Taskmentor\staticfiles\js\push.js
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__init__.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\asgi.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\settings.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\urls.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\views
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\wsgi.py
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\__init__.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\__init__.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\settings.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\settings.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\urls.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\urls.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\wsgi.cpython-311.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\taskmentor\__pycache__\wsgi.cpython-314.pyc
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\account
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\base.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\index.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\account\login.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\account\logout.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\calendar.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\client_confirm_delete.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\client_detail.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\client_form.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\client_list.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\goal_confirm_delete.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\goal_form.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\index.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\notification_settings.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\profile.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\task_confirm_delete.html
+C:\Users\ADATA\Documents\GitHub\Taskmentor\templates\core\task_form.html
+=== Конец файла files.txt ===
+
+=== Файл: admin.py ===
+from django.contrib import admin
+from .models import Client, Task, MoodEntry, Goal, PushSubscription, FCMToken, GoogleToken
+
+@admin.register(Client)
+class ClientAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'phone', 'user', 'created_at')
+    list_filter = ('user',)
+    search_fields = ('name', 'email', 'phone')
+
+@admin.register(Task)
+class TaskAdmin(admin.ModelAdmin):
+    list_display = ('title', 'client', 'due_date', 'priority', 'completed', 'goal')
+    list_filter = ('completed', 'priority', 'user', 'goal')
+    search_fields = ('title', 'client__name')
+
+@admin.register(MoodEntry)
+class MoodEntryAdmin(admin.ModelAdmin):
+    list_display = ('client', 'date', 'mood_score')
+    list_filter = ('client', 'date')
+
+@admin.register(Goal)
+class GoalAdmin(admin.ModelAdmin):
+    list_display = ('title', 'client', 'target_date', 'created_at')
+    list_filter = ('client',)
+    search_fields = ('title', 'client__name')
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'endpoint', 'created_at')
+    list_filter = ('user',)
+    search_fields = ('endpoint', 'user__email')
+
+@admin.register(FCMToken)
+class FCMTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'token', 'device_name', 'created_at')
+    list_filter = ('user',)
+    search_fields = ('token', 'user__email', 'device_name')
+
+@admin.register(GoogleToken)
+class GoogleTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'created_at', 'updated_at')
+    list_filter = ('user',)
+    search_fields = ('user__email',)
+=== Конец файла admin.py ===
+
+=== Файл: apps.py ===
+from django.apps import AppConfig
+
+class CoreConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'core'
+
+    def ready(self):
+        import core.signals
+        # Инициализируем сервис уведомлений и сохраняем в атрибуте приложения
+        from .services.base import create_notification_service
+        self.notification_service = create_notification_service()
+=== Конец файла apps.py ===
+
+=== Файл: forms.py ===
+from django import forms
+from .models import Client, Task, NotificationSettings, Goal
+
+class TaskForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = ['client', 'goal', 'title', 'description', 'due_date', 'priority']
+        widgets = {
+            'due_date': forms.DateTimeInput(
+                attrs={
+                    'type': 'datetime-local',
+                    'class': 'form-control',
+                },
+                format='%Y-%m-%dT%H:%M'
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Queryset'ы для полей client и goal будут заполнены в представлении
+        self.fields['client'].queryset = Client.objects.none()
+        self.fields['goal'].queryset = Goal.objects.none()
+        self.fields['client'].widget.attrs.update({'class': 'form-control'})
+        self.fields['goal'].widget.attrs.update({'class': 'form-control'})
+        self.fields['title'].widget.attrs.update({'class': 'form-control'})
+        self.fields['description'].widget.attrs.update({'class': 'form-control', 'rows': 3})
+        self.fields['priority'].widget.attrs.update({'class': 'form-select'})
+
+
+class NotificationSettingsForm(forms.ModelForm):
+    class Meta:
+        model = NotificationSettings
+        fields = ['receive_emails', 'receive_push']
+        labels = {
+            'receive_emails': 'Получать email-напоминания о задачах',
+            'receive_push': 'Получать push-уведомления о задачах'
+        }
+
+
+class GoalForm(forms.ModelForm):
+    """
+    Форма для создания и редактирования цели.
+    """
+    class Meta:
+        model = Goal
+        fields = ['title', 'description', 'target_date']
+        widgets = {
+            'target_date': forms.DateInput(
+                attrs={
+                    'type': 'date',
+                    'class': 'form-control',
+                },
+                format='%Y-%m-%d'
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['title'].widget.attrs.update({'class': 'form-control'})
+        self.fields['description'].widget.attrs.update({'class': 'form-control', 'rows': 3})
+=== Конец файла forms.py ===
+
+=== Файл: models.py ===
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class Client(models.Model):
+    """
+    Модель клиента специалиста.
+    Связана с пользователем (специалистом) через ForeignKey.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='clients',
+        verbose_name='Специалист'
+    )
+    name = models.CharField(max_length=100, verbose_name='Имя')
+    email = models.EmailField(blank=True, verbose_name='Email')
+    phone = models.CharField(max_length=20, blank=True, verbose_name='Телефон')
+    birth_date = models.DateField(null=True, blank=True, verbose_name='Дата рождения')
+    notes = models.TextField(blank=True, verbose_name='Заметки')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Клиент'
+        verbose_name_plural = 'Клиенты'
+
+    def __str__(self):
+        return self.name
+
+    def get_task_stats(self):
+        """Возвращает статистику задач клиента."""
+        tasks = self.tasks.all()
+        total = tasks.count()
+        completed = tasks.filter(completed=True).count()
+        return {
+            'total': total,
+            'completed': completed,
+            'percent': int(completed / total * 100) if total > 0 else 0
+        }
+
+    def get_upcoming_tasks(self, limit=5):
+        """Возвращает предстоящие невыполненные задачи (ограниченное количество)."""
+        from django.utils import timezone
+        return self.tasks.filter(
+            completed=False,
+            due_date__date__gte=timezone.now().date()
+        ).order_by('due_date')[:limit]
+
+
+class Task(models.Model):
+    """
+    Модель задачи, привязанной к клиенту.
+    """
+    PRIORITY_CHOICES = [
+        ('high', 'Высокий'),
+        ('medium', 'Средний'),
+        ('low', 'Низкий'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name='Специалист'
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name='Клиент'
+    )
+    goal = models.ForeignKey(
+        'Goal',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tasks',
+        verbose_name='Цель'
+    )
+    title = models.CharField(max_length=200, verbose_name='Название')
+    description = models.TextField(blank=True, verbose_name='Описание')
+    due_date = models.DateTimeField(verbose_name='Срок выполнения')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium', verbose_name='Приоритет')
+    completed = models.BooleanField(default=False, verbose_name='Выполнена')
+    reminder_sent = models.BooleanField(default=False, verbose_name='Напоминание отправлено')
+    google_event_id = models.CharField(max_length=255, blank=True, null=True, verbose_name='ID события в Google Calendar')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+
+    class Meta:
+        ordering = ['due_date', '-priority']
+        verbose_name = 'Задача'
+        verbose_name_plural = 'Задачи'
+
+    def __str__(self):
+        return self.title
+
+
+class MoodEntry(models.Model):
+    """
+    Модель отметки настроения клиента.
+    """
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name='mood_entries',
+        verbose_name='Клиент'
+    )
+    date = models.DateField(verbose_name='Дата')
+    mood_score = models.PositiveSmallIntegerField(
+        verbose_name='Оценка настроения',
+        help_text='Оценка от 1 до 10'
+    )
+    notes = models.TextField(blank=True, verbose_name='Комментарий')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+
+    class Meta:
+        ordering = ['-date']
+        unique_together = ['client', 'date']
+        verbose_name = 'Отметка настроения'
+        verbose_name_plural = 'Отметки настроения'
+
+    def __str__(self):
+        return f"{self.client.name} - {self.date} - {self.mood_score}"
+
+
+class NotificationSettings(models.Model):
+    """
+    Настройки уведомлений для пользователя.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notification_settings',
+        verbose_name='Пользователь'
+    )
+    receive_emails = models.BooleanField(
+        default=True,
+        verbose_name='Получать email-уведомления'
+    )
+    receive_push = models.BooleanField(
+        default=False,
+        verbose_name='Получать push-уведомления'
+    )
+
+    class Meta:
+        verbose_name = 'Настройки уведомлений'
+        verbose_name_plural = 'Настройки уведомлений'
+
+    def __str__(self):
+        return f'Настройки для {self.user.email}'
+
+
+class Goal(models.Model):
+    """
+    Цель клиента. Связана с конкретным клиентом.
+    """
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name='goals',
+        verbose_name='Клиент'
+    )
+    title = models.CharField(max_length=200, verbose_name='Название цели')
+    description = models.TextField(blank=True, verbose_name='Описание')
+    target_date = models.DateField(null=True, blank=True, verbose_name='Целевая дата')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
+
+    class Meta:
+        ordering = ['target_date', 'title']
+        verbose_name = 'Цель'
+        verbose_name_plural = 'Цели'
+
+    def __str__(self):
+        return f"{self.client.name} – {self.title}"
+
+    # Метод progress_percent удалён, так как дублирует логику из ClientAnalyticsService.
+    # Для получения прогресса цели используйте ClientAnalyticsService.get_goals_with_progress().
+
+
+class PushSubscription(models.Model):
+    """
+    Модель для хранения push-подписок пользователя.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+        verbose_name='Пользователь'
+    )
+    endpoint = models.URLField(max_length=500, verbose_name='Endpoint')
+    p256dh = models.CharField(max_length=200, verbose_name='p256dh')
+    auth = models.CharField(max_length=200, verbose_name='Auth')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Push-подписка'
+        verbose_name_plural = 'Push-подписки'
+        unique_together = ('user', 'endpoint')
+
+    def __str__(self):
+        return f'{self.user.email} - {self.endpoint[:30]}...'
+
+class FCMToken(models.Model):
+    """
+    Модель для хранения FCM-токенов мобильных устройств.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='fcm_tokens',
+        verbose_name='Пользователь'
+    )
+    token = models.CharField(max_length=500, verbose_name='FCM токен', unique=True)
+    device_name = models.CharField(max_length=100, blank=True, verbose_name='Название устройства')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'FCM токен'
+        verbose_name_plural = 'FCM токены'
+
+    def __str__(self):
+        return f'{self.user.email} - {self.token[:30]}...'
+
+class GoogleToken(models.Model):
+    """
+    Модель для хранения токенов доступа Google.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='google_token',
+        verbose_name='Google токен'
+    )
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Google токен'
+        verbose_name_plural = 'Google токены'
+
+    def __str__(self):
+        return f'Google token for {self.user.email}'
+=== Конец файла models.py ===
+
+=== Файл: signals.py ===
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth import get_user_model
+from .models import NotificationSettings
+
+User = get_user_model()
+
+@receiver(post_save, sender=User)
+def create_notification_settings(sender, instance, created, **kwargs):
+    if created:
+        NotificationSettings.objects.create(user=instance)
+=== Конец файла signals.py ===
+
+=== Файл: urls.py (core) ===
+from django.urls import path
+from . import views
+
+app_name = 'core'
+
+urlpatterns = [
+    # Клиенты
+    path('clients/', views.ClientListView.as_view(), name='client_list'),
+    path('clients/create/', views.ClientCreateView.as_view(), name='client_create'),
+    path('clients/<int:pk>/', views.ClientDetailView.as_view(), name='client_detail'),
+    path('clients/<int:pk>/update/', views.ClientUpdateView.as_view(), name='client_update'),
+    path('clients/<int:pk>/delete/', views.ClientDeleteView.as_view(), name='client_delete'),
+
+    # Задачи
+    path('tasks/', views.TaskListView.as_view(), name='task_list'),
+    path('tasks/create/', views.TaskCreateView.as_view(), name='task_create'),
+    path('tasks/<int:pk>/update/', views.TaskUpdateView.as_view(), name='task_update'),
+    path('tasks/<int:pk>/delete/', views.TaskDeleteView.as_view(), name='task_delete'),
+    path('tasks/<int:pk>/toggle/', views.toggle_task_complete, name='task_toggle'),
+
+    # Отметки настроения
+    path('clients/<int:client_pk>/mood/add/', views.MoodEntryCreateView.as_view(), name='mood_add'),
+
+    # Профиль пользователя (объединённый с настройками уведомлений)
+    path('profile/', views.ProfileView.as_view(), name='profile'),
+
+    # Цели
+    path('clients/<int:client_pk>/goals/create/', views.GoalCreateView.as_view(), name='goal_create'),
+    path('goals/<int:pk>/update/', views.GoalUpdateView.as_view(), name='goal_update'),
+    path('goals/<int:pk>/delete/', views.GoalDeleteView.as_view(), name='goal_delete'),
+
+    # Push уведомления
+    path('push/subscribe/', views.subscribe, name='push_subscribe'),
+    path('push/vapid-key/', views.vapid_key, name='vapid_key'),
+    path('push/unsubscribe-all/', views.unsubscribe_all_push, name='unsubscribe_all_push'),
+
+    # Календарь
+    path('calendar/', views.CalendarView.as_view(), name='calendar'),
+    path('calendar/data/', views.calendar_data, name='calendar_data'),
+
+    # Google Calendar
+    path('google/auth/', views.google_calendar_auth, name='google_auth'),
+    path('google/callback/', views.google_calendar_callback, name='google_callback'),
+    path('google/disconnect/', views.google_calendar_disconnect, name='google_disconnect'),
+
+    # Эндпоинт для EasyCron
+    path('cron/run-reminders/', views.run_reminders, name='cron_reminders'),
+
+    path('fcm/register/', views.register_fcm_token, name='fcm_register'),
+    path('fcm/unregister/', views.unregister_fcm_token, name='fcm_unregister'),
+
+    path('cron/reassign-tasks/', views.run_reassign, name='cron_reassign'),
+]
+=== Конец файла urls.py (core) ===
+
+=== Файл: views.py ===
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse_lazy, reverse
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, TemplateView
+from django.contrib import messages
+from django.utils import timezone
+from django.db.models import Q, Avg
+from datetime import timedelta, datetime
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.conf import settings
+import logging
+
+from .models import Client, Task, MoodEntry, NotificationSettings, Goal, PushSubscription, GoogleToken
+from .forms import TaskForm, NotificationSettingsForm, GoalForm
+from .services.calendar_service import CalendarService
+from .services.google_oauth import GoogleOAuthService
+from .services.client_analytics_service import ClientAnalyticsFacade
+from .services.task_service import TaskService
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# ГЛАВНАЯ СТРАНИЦА
+# =============================================================================
+
+def index(request):
+    return render(request, 'core/index.html')
+
+
+# =============================================================================
+# КЛИЕНТЫ
+# =============================================================================
+
+class ClientListView(LoginRequiredMixin, ListView):
+    model = Client
+    template_name = 'core/client_list.html'
+    context_object_name = 'clients'
+    paginate_by = 10
+
+    def get_queryset(self):
+        qs = Client.objects.filter(user=self.request.user)
+        search = self.request.GET.get('search', '')
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) | Q(email__icontains=search)
+            )
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search'] = self.request.GET.get('search', '')
+        return context
+
+
+class ClientCreateView(LoginRequiredMixin, CreateView):
+    model = Client
+    fields = ['name', 'email', 'phone', 'birth_date', 'notes']
+    template_name = 'core/client_form.html'
+    success_url = reverse_lazy('core:client_list')
+
+    def form_valid(self, form):
+        form.instance.user = self.request.user
+        return super().form_valid(form)
+
+
+class ClientDetailView(LoginRequiredMixin, DetailView):
+    """
+    Представление деталей клиента.
+    Использует ClientAnalyticsFacade для получения всех данных.
+    """
+    model = Client
+    template_name = 'core/client_detail.html'
+    context_object_name = 'client'
+
+    def get_queryset(self):
+        return Client.objects.filter(user=self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Используем фасад для получения полного контекста
+        facade = ClientAnalyticsFacade(self.object)
+        analytics_context = facade.get_full_context()
+
+        # Добавляем предзагруженные задачи для оптимизации
+        context['all_tasks'] = self.object.tasks.select_related('goal')
+
+        # Объединяем контексты
+        context.update(analytics_context)
+
+        return context
+
+
+class ClientUpdateView(LoginRequiredMixin, UpdateView):
+    model = Client
+    fields = ['name', 'email', 'phone', 'birth_date', 'notes']
+    template_name = 'core/client_form.html'
+    success_url = reverse_lazy('core:client_list')
+
+    def get_queryset(self):
+        return Client.objects.filter(user=self.request.user)
+
+
+class ClientDeleteView(LoginRequiredMixin, DeleteView):
+    model = Client
+    template_name = 'core/client_confirm_delete.html'
+    success_url = reverse_lazy('core:client_list')
+
+    def get_queryset(self):
+        return Client.objects.filter(user=self.request.user)
+
+
+# =============================================================================
+# ЗАДАЧИ
+# =============================================================================
+
+class TaskListView(LoginRequiredMixin, ListView):
+    model = Task
+    template_name = 'core/task_list.html'
+    context_object_name = 'tasks'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = Task.objects.filter(user=self.request.user).select_related('client')
+
+        # Фильтрация
+        filters = self._build_filters()
+        qs = self._apply_filters(qs, filters)
+
+        return qs
+
+    def _build_filters(self) -> dict:
+        """Собирает фильтры из GET-параметров."""
+        return {
+            'client_id': self.request.GET.get('client'),
+            'status': self.request.GET.get('status'),
+            'date_from': self.request.GET.get('date_from'),
+            'date_to': self.request.GET.get('date_to'),
+            'search': self.request.GET.get('search'),
+        }
+
+    def _apply_filters(self, qs, filters: dict):
+        """Применяет фильтры к queryset."""
+        if filters['client_id']:
+            qs = qs.filter(client_id=filters['client_id'])
+
+        if filters['status'] == 'pending':
+            qs = qs.filter(completed=False)
+        elif filters['status'] == 'completed':
+            qs = qs.filter(completed=True)
+
+        if filters['date_from']:
+            qs = qs.filter(due_date__date__gte=filters['date_from'])
+
+        if filters['date_to']:
+            qs = qs.filter(due_date__date__lte=filters['date_to'])
+
+        if filters['search']:
+            qs = qs.filter(
+                Q(title__icontains=filters['search']) |
+                Q(description__icontains=filters['search'])
+            )
+
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        params = self.request.GET
+
+        context['clients'] = Client.objects.filter(user=self.request.user)
+        context.update({
+            'selected_client': params.get('client', ''),
+            'selected_status': params.get('status', ''),
+            'date_from': params.get('date_from', ''),
+            'date_to': params.get('date_to', ''),
+            'search': params.get('search', ''),
+        })
+        return context
+
+
+class TaskCreateView(LoginRequiredMixin, CreateView):
+    model = Task
+    form_class = TaskForm
+    template_name = 'core/task_form.html'
+
+    def get_success_url(self):
+        return reverse_lazy('core:task_list')
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['client'].queryset = Client.objects.filter(user=self.request.user)
+        form.fields['goal'].queryset = Goal.objects.filter(client__user=self.request.user)
+        return form
+
+    def form_valid(self, form):
+        # Используем TaskService для создания задачи
+        service = TaskService(self.request.user)
+        task_data = {
+            'client_id': form.cleaned_data['client'].id,
+            'goal_id': form.cleaned_data['goal'].id if form.cleaned_data['goal'] else None,
+            'title': form.cleaned_data['title'],
+            'description': form.cleaned_data['description'],
+            'due_date': form.cleaned_data['due_date'],
+            'priority': form.cleaned_data['priority'],
+        }
+        service.create_task(task_data)
+        # Не вызываем super().form_valid, так как задача уже создана сервисом
+        return redirect(self.get_success_url())
+
+
+class TaskUpdateView(LoginRequiredMixin, UpdateView):
+    model = Task
+    form_class = TaskForm
+    template_name = 'core/task_form.html'
+
+    def get_queryset(self):
+        return Task.objects.filter(user=self.request.user)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['client'].queryset = Client.objects.filter(user=self.request.user)
+        form.fields['goal'].queryset = Goal.objects.filter(client__user=self.request.user)
+        return form
+
+    def get_success_url(self):
+        return reverse_lazy('core:task_list')
+
+    def form_valid(self, form):
+        service = TaskService(self.request.user)
+        task_data = {
+            'client_id': form.cleaned_data['client'].id,
+            'goal_id': form.cleaned_data['goal'].id if form.cleaned_data['goal'] else None,
+            'title': form.cleaned_data['title'],
+            'description': form.cleaned_data['description'],
+            'due_date': form.cleaned_data['due_date'],
+            'priority': form.cleaned_data['priority'],
+        }
+        service.update_task(self.object, task_data)
+        return redirect(self.get_success_url())
+
+
+class TaskDeleteView(LoginRequiredMixin, DeleteView):
+    model = Task
+    template_name = 'core/task_confirm_delete.html'
+    success_url = reverse_lazy('core:task_list')
+
+    def get_queryset(self):
+        return Task.objects.filter(user=self.request.user)
+
+    def delete(self, request, *args, **kwargs):
+        task = self.get_object()
+        service = TaskService(request.user)
+        service.delete_task(task)
+        return redirect(self.success_url)
+
+
+@require_POST
+def toggle_task_complete(request, pk):
+    task = get_object_or_404(Task, pk=pk, user=request.user)
+    service = TaskService(request.user)
+    service.toggle_complete(task)
+    return redirect(request.META.get('HTTP_REFERER', reverse('core:task_list')))
+
+
+# =============================================================================
+# НАСТРОЕНИЕ
+# =============================================================================
+
+class MoodEntryCreateView(LoginRequiredMixin, CreateView):
+    model = MoodEntry
+    fields = ['date', 'mood_score', 'notes']
+    template_name = 'core/mood_form.html'
+
+    def get_success_url(self):
+        return reverse('core:client_detail', kwargs={'pk': self.kwargs['client_pk']})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Добавляем объект клиента в контекст для использования в шаблоне
+        context['client'] = get_object_or_404(
+            Client,
+            pk=self.kwargs['client_pk'],
+            user=self.request.user
+        )
+        return context
+
+    def form_valid(self, form):
+        client = get_object_or_404(
+            Client,
+            pk=self.kwargs['client_pk'],
+            user=self.request.user
+        )
+        form.instance.client = client
+        return super().form_valid(form)
+
+
+# =============================================================================
+# ПРОФИЛЬ И НАСТРОЙКИ
+# =============================================================================
+
+class ProfileView(LoginRequiredMixin, UpdateView):
+    model = NotificationSettings
+    form_class = NotificationSettingsForm
+    template_name = 'core/profile.html'
+    success_url = reverse_lazy('core:profile')
+
+    def get_object(self, queryset=None):
+        settings, _ = NotificationSettings.objects.get_or_create(
+            user=self.request.user
+        )
+        return settings
+
+
+# =============================================================================
+# ЦЕЛИ
+# =============================================================================
+
+class GoalCreateView(LoginRequiredMixin, CreateView):
+    model = Goal
+    form_class = GoalForm
+    template_name = 'core/goal_form.html'
+
+    def get_success_url(self):
+        return reverse('core:client_detail', kwargs={'pk': self.kwargs['client_pk']})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Добавляем объект клиента в контекст для использования в шаблоне
+        context['client'] = get_object_or_404(
+            Client,
+            pk=self.kwargs['client_pk'],
+            user=self.request.user
+        )
+        return context
+
+    def form_valid(self, form):
+        client = get_object_or_404(
+            Client,
+            pk=self.kwargs['client_pk'],
+            user=self.request.user
+        )
+        form.instance.client = client
+        return super().form_valid(form)
+
+
+class GoalUpdateView(LoginRequiredMixin, UpdateView):
+    model = Goal
+    form_class = GoalForm
+    template_name = 'core/goal_form.html'
+
+    def get_queryset(self):
+        return Goal.objects.filter(client__user=self.request.user)
+
+    def get_success_url(self):
+        return reverse('core:client_detail', kwargs={'pk': self.object.client.pk})
+
+
+class GoalDeleteView(LoginRequiredMixin, DeleteView):
+    model = Goal
+    template_name = 'core/goal_confirm_delete.html'
+
+    def get_queryset(self):
+        return Goal.objects.filter(client__user=self.request.user)
+
+    def get_success_url(self):
+        return reverse('core:client_detail', kwargs={'pk': self.object.client.pk})
+
+
+# =============================================================================
+# PUSH УВЕДОМЛЕНИЯ
+# =============================================================================
+
+@require_POST
+def subscribe(request):
+    """Сохраняет push-подписку пользователя."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    import json
+    data = json.loads(request.body)
+    endpoint = data.get('endpoint')
+    p256dh = data.get('keys', {}).get('p256dh')
+    auth = data.get('keys', {}).get('auth')
+
+    if not (endpoint and p256dh and auth):
+        return JsonResponse({'error': 'Invalid subscription data'}, status=400)
+
+    PushSubscription.objects.update_or_create(
+        user=request.user,
+        endpoint=endpoint,
+        defaults={'p256dh': p256dh, 'auth': auth}
+    )
+    return JsonResponse({'status': 'ok'})
+
+
+def vapid_key(request):
+    """Возвращает публичный VAPID ключ."""
+    return JsonResponse({'key': settings.VAPID_PUBLIC_KEY})
+
+
+@require_POST
+def register_fcm_token(request):
+    """Сохраняет FCM-токен мобильного устройства."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    import json
+    data = json.loads(request.body)
+    token = data.get('token')
+    device_name = data.get('device_name', '')
+
+    if not token:
+        return JsonResponse({'error': 'Missing token'}, status=400)
+
+    from core.services.fcm_service import FCMService
+    success = FCMService.register_token(request.user, token, device_name)
+    if success:
+        return JsonResponse({'status': 'ok'})
+    else:
+        return JsonResponse({'error': 'Failed to register token'}, status=500)
+
+
+@require_POST
+def unregister_fcm_token(request):
+    """Удаляет FCM-токен."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    import json
+    data = json.loads(request.body)
+    token = data.get('token')
+    if not token:
+        return JsonResponse({'error': 'Missing token'}, status=400)
+
+    from core.services.fcm_service import FCMService
+    success = FCMService.unregister_token(token)
+    return JsonResponse({'status': 'ok' if success else 'error'})
+
+
+@require_POST
+def unsubscribe_all_push(request):
+    """Удаляет все push-подписки текущего пользователя."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    
+    deleted_count, _ = PushSubscription.objects.filter(user=request.user).delete()
+    return JsonResponse({'status': 'ok', 'deleted': deleted_count})
+
+
+# =============================================================================
+# КАЛЕНДАРЬ
+# =============================================================================
+
+class CalendarView(LoginRequiredMixin, TemplateView):
+    template_name = 'core/calendar.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['clients'] = self.request.user.clients.all()
+        context['google_connected'] = GoogleOAuthService.is_connected(self.request.user)
+        return context
+
+
+def calendar_data(request):
+    """Возвращает задачи пользователя в формате JSON."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    start_raw = request.GET.get('start')
+    end_raw = request.GET.get('end')
+
+    if not start_raw or not end_raw:
+        return JsonResponse({'error': 'Missing start/end'}, status=400)
+
+    start_date = datetime.strptime(start_raw, '%Y-%m-%d')
+    end_date = datetime.strptime(end_raw, '%Y-%m-%d') + timedelta(days=1)
+
+    tasks = Task.objects.filter(
+        user=request.user,
+        due_date__gte=start_date,
+        due_date__lt=end_date
+    ).select_related('client')
+
+    events = [
+        {
+            'id': task.id,
+            'title': task.title,
+            'start': task.due_date.date().isoformat(),
+            'end': task.due_date.date().isoformat(),
+            'allDay': True,
+            'backgroundColor': '#FF8C00' if not task.completed else '#6c757d',
+            'extendedProps': {
+                'client': task.client.name,
+                'completed': task.completed,
+            }
+        }
+        for task in tasks
+    ]
+
+    return JsonResponse(events, safe=False)
+
+
+# =============================================================================
+# GOOGLE CALENDAR OAUTH
+# =============================================================================
+
+def google_calendar_auth(request):
+    """Инициирует авторизацию Google Calendar."""
+    try:
+        redirect_uri = request.build_absolute_uri(reverse('core:google_callback'))
+        oauth_service = GoogleOAuthService(redirect_uri)
+
+        auth_url, state, flow = oauth_service.get_authorization_url(request)
+        request.session['oauth_state'] = state
+        request.session['oauth_redirect_uri'] = redirect_uri
+        return redirect(auth_url)
+    except ValueError as e:
+        # Ошибка из-за отсутствия client_id/secret
+        logger.error(f"Google OAuth configuration error: {e}")
+        messages.error(request, 'Ошибка конфигурации Google OAuth. Проверьте переменные окружения GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET.')
+        return redirect(reverse('core:profile'))
+    except Exception as e:
+        logger.error(f"Google OAuth initiation failed: {e}")
+        messages.error(request, 'Не удалось инициировать авторизацию Google.')
+        return redirect(reverse('core:profile'))
+
+
+def google_calendar_callback(request):
+    """Обрабатывает callback от Google."""
+    from google_auth_oauthlib.flow import Flow
+    from core.services.google_oauth import GoogleOAuthService
+
+    state = request.session.get('oauth_state')
+    redirect_uri = request.session.get('oauth_redirect_uri')
+
+    if not state or not redirect_uri:
+        messages.error(request, 'Ошибка авторизации: отсутствует состояние сессии.')
+        return redirect(reverse('core:profile'))
+
+    try:
+        # Создаём временный сервис только для получения конфига
+        oauth_service = GoogleOAuthService(redirect_uri)
+        flow = Flow.from_client_config(
+            oauth_service._get_client_config(),
+            scopes=GoogleOAuthService.SCOPES,
+            state=state,
+            redirect_uri=redirect_uri
+        )
+        oauth_service.fetch_and_save_tokens(request, flow)
+        messages.success(request, 'Google Calendar успешно подключён!')
+        logger.info(f"User {request.user.id} successfully connected Google Calendar")
+    except Exception as e:
+        logger.exception("Google OAuth callback failed")
+        messages.error(request, f'Ошибка при подключении Google Calendar: {str(e)}')
+    finally:
+        # Очищаем сессию
+        request.session.pop('oauth_state', None)
+        request.session.pop('oauth_redirect_uri', None)
+
+    return redirect(reverse('core:profile'))
+
+
+def google_calendar_disconnect(request):
+    """Отключает Google Calendar (удаляет токен)."""
+    if not request.user.is_authenticated:
+        return redirect(reverse('core:profile'))
+
+    try:
+        GoogleOAuthService.revoke_access(request.user)
+        messages.success(request, 'Google Calendar отключён.')
+    except Exception as e:
+        logger.error(f"Error disconnecting Google Calendar: {e}")
+        messages.error(request, 'Ошибка при отключении Google Calendar.')
+
+    return redirect(reverse('core:profile'))
+
+# =============================================================================
+# CRON ДЛЯ НАПОМИНАНИЙ
+# =============================================================================
+
+def run_reminders(request):
+    """Эндпоинт для вызова напоминаний (EasyCron)."""
+    auth_header = request.headers.get('Authorization', '')
+    expected_token = getattr(settings, 'CRON_TOKEN', None)
+
+    if not expected_token:
+        logger.error("CRON_TOKEN not set")
+        return JsonResponse({'error': 'Server configuration error'}, status=500)
+
+    if not auth_header.startswith('Bearer ') or auth_header[7:] != expected_token:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    try:
+        from django.core.management import call_command
+        call_command('send_task_reminders')
+        return JsonResponse({'status': 'ok', 'message': 'Reminders sent successfully'})
+    except Exception as e:
+        logger.exception("Error in run_reminders")
+        return JsonResponse({'error': str(e)}, status=500)
+
+def run_reassign(request):
+    """Эндпоинт для вызова переноса задач (защищён токеном)."""
+    auth_header = request.headers.get('Authorization', '')
+    expected_token = getattr(settings, 'CRON_TOKEN', None)
+    if not expected_token:
+        return JsonResponse({'error': 'Server configuration error'}, status=500)
+    if not auth_header.startswith('Bearer ') or auth_header[7:] != expected_token:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    try:
+        from django.core.management import call_command
+        call_command('reassign_overdue_tasks')
+        return JsonResponse({'status': 'ok', 'message': 'Tasks reassigned successfully'})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+=== Конец файла views.py ===
+
+=== Файл: send_task_reminders.py ===
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from datetime import timedelta
+from django.apps import apps
+from core.models import Task
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class Command(BaseCommand):
+    help = 'Отправляет напоминания о задачах, срок которых наступит через час'
+
+    def handle(self, *args, **options):
+        notification_service = apps.get_app_config('core').notification_service
+        now = timezone.now()
+        one_hour_later = now + timedelta(hours=1)
+
+        tasks = Task.objects.filter(
+            completed=False,
+            due_date__gte=now,
+            due_date__lte=one_hour_later,
+            reminder_sent=False
+        ).select_related('user', 'client')
+
+        count = 0
+        for task in tasks:
+            try:
+                result = notification_service.notify_task_reminder(task)
+
+                # Проверяем, что хотя бы один канал сработал
+                if any(v for v in result.values() if v is not None):
+                    task.reminder_sent = True
+                    task.save(update_fields=['reminder_sent'])
+                    count += 1
+                    logger.info(f"Reminder sent for task {task.id}")
+
+            except Exception as e:
+                logger.error(f"Failed to send reminders for task {task.id}: {e}")
+
+        self.stdout.write(
+            self.style.SUCCESS(f'Successfully sent {count} reminders')
+        )
+=== Конец файла send_task_reminders.py ===
+
+=== Файл: reassign_overdue_tasks.py ===
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from datetime import timedelta
+from datetime import datetime
+from django.conf import settings
+from core.models import Task
+
+class Command(BaseCommand):
+    help = 'Переносит просроченные невыполненные задачи на ближайшие свободные дни'
+
+    def handle(self, *args, **options):
+        now = timezone.now()
+        # Находим все невыполненные задачи с истекшим сроком
+        overdue_tasks = Task.objects.filter(
+            completed=False,
+            due_date__lt=now
+        ).select_related('user').order_by('priority')  # приоритет: high, medium, low (по алфавиту)
+
+        count = 0
+        # Группируем по пользователям, чтобы для каждого пользователя независимо переносить задачи
+        users_tasks = {}
+        for task in overdue_tasks:
+            users_tasks.setdefault(task.user, []).append(task)
+
+        for user, tasks in users_tasks.items():
+            # Сортируем задачи по приоритету (high → medium → low)
+            priority_order = {'high': 0, 'medium': 1, 'low': 2}
+            tasks.sort(key=lambda t: priority_order.get(t.priority, 2))
+
+            # Начинаем с текущей даты
+            current_date = now.date()
+            # Словарь: дата -> количество задач, уже запланированных на этот день (учитываем существующие задачи пользователя)
+            daily_counts = {}
+            # Загружаем существующие задачи пользователя (невыполненные и будущие)
+            existing_tasks = Task.objects.filter(user=user, completed=False, due_date__gte=now).values('due_date__date')
+            for et in existing_tasks:
+                date = et['due_date__date']
+                daily_counts[date] = daily_counts.get(date, 0) + 1
+
+            for task in tasks:
+                # Ищем первый день, на который можно перенести задачу
+                target_date = current_date
+                while True:
+                    # Проверяем, не превышен ли лимит задач на этот день
+                    if daily_counts.get(target_date, 0) < settings.MAX_TASKS_PER_DAY:
+                        # Устанавливаем новое время на 10:00 UTC (можно сделать настраиваемым)
+                        new_due = timezone.make_aware(
+                            datetime.combine(target_date, datetime.min.time()) + timedelta(hours=10)
+                        )
+                        task.due_date = new_due
+                        task.save()
+                        daily_counts[target_date] = daily_counts.get(target_date, 0) + 1
+                        count += 1
+                        self.stdout.write(f'Task {task.id} reassigned to {new_due}')
+                        break
+                    target_date += timedelta(days=1)
+        self.stdout.write(self.style.SUCCESS(f'Successfully reassigned {count} overdue tasks'))
+=== Конец файла reassign_overdue_tasks.py ===
+
+=== Файл: 0001_initial.py ===
+# Generated by Django 5.2.11 on 2026-03-06 13:27
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Client',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=100, verbose_name='Имя')),
+                ('email', models.EmailField(blank=True, max_length=254, verbose_name='Email')),
+                ('phone', models.CharField(blank=True, max_length=20, verbose_name='Телефон')),
+                ('birth_date', models.DateField(blank=True, null=True, verbose_name='Дата рождения')),
+                ('notes', models.TextField(blank=True, verbose_name='Заметки')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')),
+                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Дата обновления')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='clients', to=settings.AUTH_USER_MODEL, verbose_name='Специалист')),
+            ],
+            options={
+                'verbose_name': 'Клиент',
+                'verbose_name_plural': 'Клиенты',
+                'ordering': ['-created_at'],
+            },
+        ),
+        migrations.CreateModel(
+            name='Task',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('title', models.CharField(max_length=200, verbose_name='Название')),
+                ('description', models.TextField(blank=True, verbose_name='Описание')),
+                ('due_date', models.DateTimeField(verbose_name='Срок выполнения')),
+                ('priority', models.CharField(choices=[('high', 'Высокий'), ('medium', 'Средний'), ('low', 'Низкий')], default='medium', max_length=10, verbose_name='Приоритет')),
+                ('completed', models.BooleanField(default=False, verbose_name='Выполнена')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')),
+                ('client', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to='core.client', verbose_name='Клиент')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to=settings.AUTH_USER_MODEL, verbose_name='Специалист')),
+            ],
+            options={
+                'verbose_name': 'Задача',
+                'verbose_name_plural': 'Задачи',
+                'ordering': ['due_date', '-priority'],
+            },
+        ),
+        migrations.CreateModel(
+            name='MoodEntry',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField(verbose_name='Дата')),
+                ('mood_score', models.PositiveSmallIntegerField(help_text='Оценка от 1 до 10', verbose_name='Оценка настроения')),
+                ('notes', models.TextField(blank=True, verbose_name='Комментарий')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')),
+                ('client', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mood_entries', to='core.client', verbose_name='Клиент')),
+            ],
+            options={
+                'verbose_name': 'Отметка настроения',
+                'verbose_name_plural': 'Отметки настроения',
+                'ordering': ['-date'],
+                'unique_together': {('client', 'date')},
+            },
+        ),
+    ]
+=== Конец файла 0001_initial.py ===
+
+=== Файл: 0002_notificationsettings.py ===
+# Generated by Django 5.2.11 on 2026-03-10 21:20
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0001_initial'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='NotificationSettings',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('receive_emails', models.BooleanField(default=True, verbose_name='Получать email-уведомления')),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='notification_settings', to=settings.AUTH_USER_MODEL, verbose_name='Пользователь')),
+            ],
+            options={
+                'verbose_name': 'Настройки уведомлений',
+                'verbose_name_plural': 'Настройки уведомлений',
+            },
+        ),
+    ]
+=== Конец файла 0002_notificationsettings.py ===
+
+=== Файл: 0003_goal_task_goal.py ===
+# Generated by Django 5.2.11 on 2026-03-12 16:38
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0002_notificationsettings'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Goal',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('title', models.CharField(max_length=200, verbose_name='Название цели')),
+                ('description', models.TextField(blank=True, verbose_name='Описание')),
+                ('target_date', models.DateField(blank=True, null=True, verbose_name='Целевая дата')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')),
+                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Дата обновления')),
+                ('client', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='goals', to='core.client', verbose_name='Клиент')),
+            ],
+            options={
+                'verbose_name': 'Цель',
+                'verbose_name_plural': 'Цели',
+                'ordering': ['target_date', 'title'],
+            },
+        ),
+        migrations.AddField(
+            model_name='task',
+            name='goal',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='tasks', to='core.goal', verbose_name='Цель'),
+        ),
+    ]
+=== Конец файла 0003_goal_task_goal.py ===
+
+=== Файл: 0004_task_reminder_sent.py ===
+# Generated by Django 5.2.11 on 2026-03-14 12:35
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0003_goal_task_goal'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='task',
+            name='reminder_sent',
+            field=models.BooleanField(default=False, verbose_name='Напоминание отправлено'),
+        ),
+    ]
+=== Конец файла 0004_task_reminder_sent.py ===
+
+=== Файл: 0005_notificationsettings_receive_push_and_more.py ===
+# Generated by Django 5.2.11 on 2026-03-21 20:01
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0004_task_reminder_sent'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='notificationsettings',
+            name='receive_push',
+            field=models.BooleanField(default=False, verbose_name='Получать push-уведомления'),
+        ),
+        migrations.AddField(
+            model_name='task',
+            name='google_event_id',
+            field=models.CharField(blank=True, max_length=255, null=True, verbose_name='ID события в Google Calendar'),
+        ),
+        migrations.CreateModel(
+            name='GoogleToken',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('access_token', models.TextField()),
+                ('refresh_token', models.TextField()),
+                ('expires_at', models.DateTimeField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='google_token', to=settings.AUTH_USER_MODEL, verbose_name='Google токен')),
+            ],
+            options={
+                'verbose_name': 'Google токен',
+                'verbose_name_plural': 'Google токены',
+            },
+        ),
+        migrations.CreateModel(
+            name='PushSubscription',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('endpoint', models.URLField(max_length=500, verbose_name='Endpoint')),
+                ('p256dh', models.CharField(max_length=200, verbose_name='p256dh')),
+                ('auth', models.CharField(max_length=200, verbose_name='Auth')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='push_subscriptions', to=settings.AUTH_USER_MODEL, verbose_name='Пользователь')),
+            ],
+            options={
+                'verbose_name': 'Push-подписка',
+                'verbose_name_plural': 'Push-подписки',
+                'unique_together': {('user', 'endpoint')},
+            },
+        ),
+    ]
+=== Конец файла 0005_notificationsettings_receive_push_and_more.py ===
+
+=== Файл: 0006_fcmtoken.py ===
+# Generated by Django 5.2.11 on 2026-04-03 14:23
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0005_notificationsettings_receive_push_and_more'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='FCMToken',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('token', models.CharField(max_length=500, unique=True, verbose_name='FCM токен')),
+                ('device_name', models.CharField(blank=True, max_length=100, verbose_name='Название устройства')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='fcm_tokens', to=settings.AUTH_USER_MODEL, verbose_name='Пользователь')),
+            ],
+            options={
+                'verbose_name': 'FCM токен',
+                'verbose_name_plural': 'FCM токены',
+            },
+        ),
+    ]
+=== Конец файла 0006_fcmtoken.py ===
+
+=== Файл: base.py (services) ===
+"""
+Абстрактный слой для сервисов уведомлений.
+Следует принципам SOLID: OCP, DIP.
+"""
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional, List, Protocol, runtime_checkable
+from django.contrib.auth.models import User
+
+
+@dataclass(frozen=True)
+class NotificationPayload:
+    """
+    Единый формат данных для всех уведомлений.
+    frozen=True делает объект иммутабельным (безопасность).
+    """
+    title: str
+    body: str
+    user: User
+    data: Optional[dict] = None
+    task_id: Optional[int] = None
+    client_name: Optional[str] = None
+
+
+@runtime_checkable
+class NotificationChannel(Protocol):
+    """
+    Protocol вместо ABC для гибкости типизации.
+    Любой класс с этими методами считается каналом уведомлений.
+    """
+
+    def send(self, payload: NotificationPayload) -> bool:
+        """Отправить уведомление. Возвращает True при успехе."""
+        ...
+
+    def is_enabled_for_user(self, user: User) -> bool:
+        """Проверить, включён ли канал для пользователя."""
+        ...
+
+
+class EmailChannel:
+    """
+    Канал email-уведомлений.
+    Не наследуется от ABC - использует Protocol для Duck Typing.
+    """
+
+    def __init__(self, from_email: Optional[str] = None):
+        """
+        DIP: Зависимость внедряется через конструктор, не хардкод.
+        """
+        from django.conf import settings
+        self._from_email = from_email or getattr(
+            settings, 'DEFAULT_FROM_EMAIL', 'noreply@taskmentor.local'
+        )
+
+    def is_enabled_for_user(self, user: User) -> bool:
+        try:
+            return user.notification_settings.receive_emails
+        except AttributeError:
+            return True  # По умолчанию включено
+
+    def send(self, payload: NotificationPayload) -> bool:
+        if not self.is_enabled_for_user(payload.user):
+            return False
+
+        from django.core.mail import send_mail
+        try:
+            send_mail(
+                subject=payload.title,
+                message=payload.body,
+                from_email=self._from_email,
+                recipient_list=[payload.user.email],
+                fail_silently=False
+            )
+            return True
+        except Exception:
+            return False
+
+
+class PushChannel:
+    """Канал push-уведомлений (Web Push)."""
+
+    def is_enabled_for_user(self, user: User) -> bool:
+        try:
+            return user.notification_settings.receive_push
+        except AttributeError:
+            return False
+
+    def send(self, payload: NotificationPayload) -> bool:
+        if not self.is_enabled_for_user(payload.user):
+            return False
+
+        from .notification_service import send_push_notification
+        return send_push_notification(
+            user=payload.user,
+            title=payload.title,
+            body=payload.body,
+            data=payload.data
+        )
+
+
+class FCMChannel:
+    """Канал push-уведомлений через Firebase Cloud Messaging."""
+
+    def is_enabled_for_user(self, user: User) -> bool:
+        try:
+            return user.notification_settings.receive_push
+        except AttributeError:
+            return False
+
+    def send(self, payload: NotificationPayload) -> bool:
+        if not self.is_enabled_for_user(payload.user):
+            return False
+
+        from .fcm_service import FCMService
+        return FCMService.send_notification(
+            user=payload.user,
+            title=payload.title,
+            body=payload.body,
+            data=payload.data
+        )
+
+
+class SMSChannel:
+    """
+    Новый канал SMS - добавлен без модификации NotificationService.
+    Демонстрация OCP: расширение через добавление, не изменение.
+    """
+
+    def __init__(self, sms_gateway: Optional['SMSGateway'] = None):
+        self._gateway = sms_gateway
+
+    def is_enabled_for_user(self, user: User) -> bool:
+        # Проверяем наличие телефона и настройки
+        return hasattr(user, 'profile') and getattr(user.profile, 'receive_sms', False)
+
+    def send(self, payload: NotificationPayload) -> bool:
+        if not self.is_enabled_for_user(payload.user):
+            return False
+
+        # Реализация отправки SMS
+        phone = getattr(payload.user, 'phone', None)
+        if not phone:
+            return False
+
+        # self._gateway.send(phone, payload.body)
+        return True
+
+
+class NotificationService:
+    """
+    Фасад для отправки уведомлений.
+
+    OCP: Открыт для расширения (новые каналы), закрыт для модификации.
+    DIP: Зависит от абстракции (Protocol), не от конкретики.
+    """
+
+    def __init__(self, channels: Optional[List[NotificationChannel]] = None):
+        """
+        OCP: Каналы передаются снаружи, не хардкодятся.
+        Можно передать любой набор каналов без изменения класса.
+        """
+        self._channels: List[NotificationChannel] = channels or []
+
+    def add_channel(self, channel: NotificationChannel) -> 'NotificationService':
+        """
+        Fluent interface для цепочечного добавления каналов.
+
+        Returns:
+            self для поддержки цепочки вызовов.
+        """
+        self._channels.append(channel)
+        return self
+
+    def notify(self, payload: NotificationPayload) -> dict:
+        """
+        Отправляет уведомление через все доступные каналы.
+
+        Args:
+            payload: Данные уведомления
+
+        Returns:
+            Словарь результатов по каналам.
+        """
+        results = {}
+
+        for channel in self._channels:
+            channel_name = channel.__class__.__name__
+
+            if not channel.is_enabled_for_user(payload.user):
+                results[channel_name] = 'disabled'
+                continue
+
+            try:
+                success = channel.send(payload)
+                results[channel_name] = 'sent' if success else 'failed'
+            except Exception as e:
+                results[channel_name] = f'error: {str(e)}'
+
+        return results
+
+    def notify_task_created(self, task) -> dict:
+        """Уведомление о создании задачи."""
+        payload = NotificationPayload(
+            title=f'Новая задача: {task.title}',
+            body=self._format_task_message(task, 'создана'),
+            user=task.user,
+            task_id=task.id,
+            client_name=task.client.name,
+            data={'url': f'/core/tasks/{task.id}/update/'}
+        )
+        return self.notify(payload)
+
+    def notify_task_reminder(self, task) -> dict:
+        """Уведомление-напоминание о задаче."""
+        payload = NotificationPayload(
+            title=f'Напоминание: {task.title} (через час)',
+            body=self._format_task_message(task, 'истекает через час'),
+            user=task.user,
+            task_id=task.id,
+            client_name=task.client.name,
+            data={'url': f'/core/tasks/{task.id}/update/'}
+        )
+        return self.notify(payload)
+
+    def _format_task_message(self, task, action: str) -> str:
+        return f"""Здравствуйте!
+
+Задача для клиента {task.client.name} {action}.
+Название: {task.title}
+Описание: {task.description or 'нет'}
+Срок выполнения: {task.due_date.strftime('%d.%m.%Y %H:%M')}
+Приоритет: {task.get_priority_display()}
+
+Пожалуйста, не забудьте выполнить задачу.
+
+С уважением,
+TaskMentor"""
+
+
+# Фабрика для создания сконфигурированного сервиса
+def create_notification_service() -> NotificationService:
+    """
+    Factory function для создания сервиса со стандартным набором каналов.
+    """
+    return (NotificationService()
+            .add_channel(EmailChannel())
+            .add_channel(PushChannel())
+            .add_channel(FCMChannel()))
+=== Конец файла base.py (services) ===
+
+=== Файл: calendar_service.py ===
+"""
+Сервис для работы с Google Calendar API.
+Не зависит от OAuth логики (SRP).
+"""
+import logging
+import requests
+from typing import Optional
+from types import SimpleNamespace
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
+from core.models import GoogleToken
+
+User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _requests_request_with_body(method, url, headers=None, body=None):
+    """
+    Адаптер для библиотеки google-auth, которая передаёт параметр 'body',
+    а requests.request ожидает 'data'. Возвращает объект с атрибутом 'data',
+    содержащим тело ответа (bytes), что требуется google-auth.
+    """
+    kwargs = {'method': method, 'url': url, 'headers': headers}
+    if body is not None:
+        kwargs['data'] = body
+    response = requests.request(**kwargs)
+    # Оборачиваем response в объект с атрибутом data (bytes)
+    return SimpleNamespace(data=response.content, status=response.status_code)
+
+
+class CalendarService:
+    """
+    Сервис для управления событиями Google Calendar.
+    Использует токены из модели GoogleToken.
+    """
+
+    def __init__(self, user: User):
+        self.user = user
+        self.service = self._build_service()
+
+    def _build_service(self):
+        """Создаёт сервис Google Calendar API из сохранённых токенов."""
+        try:
+            token_obj = GoogleToken.objects.get(user=self.user)
+        except GoogleToken.DoesNotExist:
+            logger.warning(f"No Google token for user {self.user.id}")
+            return None
+
+        # Библиотека google-auth ожидает naive datetime, поэтому убираем timezone
+        expiry = token_obj.expires_at
+        if expiry and expiry.tzinfo:
+            expiry = expiry.replace(tzinfo=None)
+
+        credentials = Credentials(
+            token=token_obj.access_token,
+            refresh_token=token_obj.refresh_token,
+            token_uri='https://oauth2.googleapis.com/token',
+            client_id=settings.GOOGLE_OAUTH2_CLIENT_ID,
+            client_secret=settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+            expiry=expiry
+        )
+
+        # Если токен истёк, пробуем обновить
+        if credentials.expired:
+            try:
+                # Используем адаптер, который возвращает объект с атрибутом data
+                credentials.refresh(_requests_request_with_body)
+                # Обновляем токен в БД (сохраняем с timezone)
+                from django.utils import timezone
+                token_obj.access_token = credentials.token
+                new_expiry = credentials.expiry
+                if new_expiry and not timezone.is_aware(new_expiry):
+                    new_expiry = timezone.make_aware(new_expiry)
+                token_obj.expires_at = new_exp

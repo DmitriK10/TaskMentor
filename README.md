@@ -1,32 +1,17 @@
-# TaskMentor
+## Запуск фоновых задач (cron)
 
-TaskMentor — веб-приложение на Django для специалистов помогающих профессий (коучи, психологи, тренеры). Позволяет управлять клиентами, задачами, отслеживать прогресс и настроение клиентов с помощью визуальных инструментов и email-уведомлений.
+Для работы напоминаний и адаптивного планировщика используйте команды:
 
-## Функциональность
+python manage.py send_task_reminders
+python manage.py reassign_overdue_tasks
 
-- Аутентификация через Google OAuth 2.0.
-- CRUD для клиентов.
-- CRUD для задач с привязкой к клиентам, приоритетами, сроками и отметкой выполнения.
-- Трекинг настроения клиента (оценка 1–10) с историей и графиком (Chart.js).
-- Визуализация прогресса задач (прогресс-бар, список предстоящих задач).
-- Цели клиента с отслеживанием прогресса (процент выполненных задач).
-- Настройка email-уведомлений (в профиле пользователя):
-  - Уведомление при создании задачи.
-  - Напоминание за час до срока задачи (периодическая задача).
-- Адаптивный интерфейс на Bootstrap 5, оранжевая тема.
+Либо вызывайте защищённые HTTP‑эндпоинты (необходим CRON_TOKEN из .env):
 
-## Технологии
+curl -X POST https://your-domain.com/core/cron/run-reminders/ \
+  -H "Authorization: Bearer $CRON_TOKEN"
 
-- Python 3.11, Django 5.2
-- SQLite (разработка), PostgreSQL (продакшен)
-- django-allauth (Google OAuth)
-- Bootstrap 5, Chart.js
-- Gunicorn, WhiteNoise
-- python-decouple, dj-database-url
+curl -X POST https://your-domain.com/core/cron/reassign-tasks/ \
+  -H "Authorization: Bearer $CRON_TOKEN"
 
-## Локальный запуск
-
-1. **Клонируйте репозиторий**
-   ```bash
-   git clone https://github.com/ВАШ_ЛОГИН/taskmentor.git
-   cd taskmentor
+На Railway / аналогичных платформах используйте встроенные планировщики  
+с поддержкой HTTP‑запросов, передавая заголовок Authorization.

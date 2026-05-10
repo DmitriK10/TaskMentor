@@ -8,6 +8,23 @@
     <a href="{% url 'core:client_create' %}" class="btn btn-primary">Добавить клиента</a>
 </div>
 
+<!-- Поиск клиентов -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Поиск клиентов</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-8">
+                <input type="text" name="search" class="form-control" placeholder="Имя или email" value="{{ search }}">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">Найти</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="row">
     {% for client in clients %}
     <div class="col-md-4 mb-3">

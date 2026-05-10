@@ -7,6 +7,10 @@ from pathlib import Path
 from decouple import config
 import dj_database_url
 
+# Принудительно отключаем проверку HTTPS для OAuth при локальной разработке
+if config('DEBUG', default=True, cast=bool):
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,12 +30,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',  # required for allauth
+    'django.contrib.sites',
 
-    # our apps
     'core',
-
-    # allauth
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -40,14 +41,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # for static files in production
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',  # for allauth >=0.57
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'taskmentor.urls'
@@ -55,7 +56,7 @@ ROOT_URLCONF = 'taskmentor.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # global templates folder
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -70,15 +71,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'taskmentor.wsgi.application'
 
-# Database
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
-        conn_max_age=600
-    )
-}
+if DEBUG:
+    # Разработка: SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    # Продакшен: MySQL через переменные окружения
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASSWORD'),
+            'HOST': config('DB_HOST'),
+            'PORT': config('DB_PORT'),
+        }
+    }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -86,22 +99,18 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Internationalization
 LANGUAGE_CODE = 'ru-ru'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']  # additional static folders
-STATIC_ROOT = BASE_DIR / 'staticfiles'   # where collectstatic puts files
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'  # for production
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Authentication backends
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
@@ -109,37 +118,27 @@ AUTHENTICATION_BACKENDS = [
 
 SITE_ID = 1
 
-# Login/logout redirects
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Allauth settings
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
-ACCOUNT_EMAIL_VERIFICATION = 'none'
+# Гибкая настройка верификации email: 'mandatory' для продакшена, 'none' для разработки
+ACCOUNT_EMAIL_VERIFICATION = config('ACCOUNT_EMAIL_VERIFICATION', default='none')
 
-# Provider specific settings
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
         'OAUTH_PKCE_ENABLED': True,
     }
 }
 
-# CSRF settings
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 CSRF_COOKIE_HTTPONLY = False
 CSRF_USE_SESSIONS = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 
-# ------------------------------------------------------------
 # Email settings
-# ------------------------------------------------------------
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
@@ -160,22 +159,38 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+else:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'http'
+
+CRON_TOKEN = config('CRON_TOKEN', default='')
+
+VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
+VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
+
+# Проверка CRON_TOKEN в продакшене
+if not DEBUG and not CRON_TOKEN:
+    raise ValueError("CRON_TOKEN must be set in production for cron endpoints security")
+
+# Google OAuth2 (для Calendar)
+GOOGLE_OAUTH2_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
+GOOGLE_OAUTH2_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET', default='')
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-    },
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'root': {'handlers': ['console'], 'level': 'INFO'},
     'loggers': {
-        'allauth': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
-        },
+        'core': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'allauth': {'handlers': ['console'], 'level': 'DEBUG'},
     },
 }
 
-# ---------- НОВАЯ НАСТРОЙКА ДЛЯ ТОКЕНА EASYCRON ----------
-CRON_TOKEN = config('CRON_TOKEN', default='')
+# Firebase (FCM)
+FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
+
+# Максимальное количество задач в день для адаптивного планировщика
+MAX_TASKS_PER_DAY = 5

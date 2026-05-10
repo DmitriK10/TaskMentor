@@ -30,9 +30,10 @@ class TaskForm(forms.ModelForm):
 class NotificationSettingsForm(forms.ModelForm):
     class Meta:
         model = NotificationSettings
-        fields = ['receive_emails']
+        fields = ['receive_emails', 'receive_push']
         labels = {
-            'receive_emails': 'Получать email-напоминания о задачах'
+            'receive_emails': 'Получать email-напоминания о задачах',
+            'receive_push': 'Получать push-уведомления о задачах'
         }
 
 

@@ -1,0 +1,15 @@
+asgiref==3.11.1
+Django==5.2.11
+django-allauth==65.14.3
+python-decouple==3.8
+dj-database-url==3.1.2
+gunicorn==25.1.0
+psycopg2-binary==2.9.11
+whitenoise==6.11.0
+PyJWT==2.10.1
+firebase-admin==6.2.0
+pywebpush==1.14.1
+google-api-python-client==2.108.0
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+mysqlclient==2.2.0

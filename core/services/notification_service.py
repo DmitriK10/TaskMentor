@@ -1,71 +1,89 @@
+"""
+Сервис отправки push-уведомлений.
+Изолирован от других сервисов уведомлений.
+"""
+import json
 import logging
-from django.core.mail import send_mail
 from django.conf import settings
-from django.utils import timezone
-from ..models import NotificationSettings
+from pywebpush import webpush, WebPushException
 
 logger = logging.getLogger(__name__)
 
-def _send_email(task, subject, message):
-    """Внутренняя функция для отправки email с проверкой настроек."""
-    # Не отправляем для просроченных задач
-    if task.due_date <= timezone.now():
-        logger.info(f"Task {task.id} is overdue, skipping email")
-        return False
 
-    # Получаем или создаём настройки уведомлений
+def send_push_notification(user, title, body, data=None):
+    """
+    Отправляет push-уведомление всем активным подпискам пользователя (Web Push).
+
+    Returns:
+        bool: True если хотя бы одно уведомление отправлено успешно
+    """
+    # Проверяем настройки пользователя
     try:
-        settings_obj = task.user.notification_settings
-    except NotificationSettings.DoesNotExist:
-        settings_obj = NotificationSettings.objects.create(user=task.user)
-        logger.info(f"Created missing notification settings for user {task.user.id}")
-
-    if not settings_obj.receive_emails:
-        logger.info(f"User {task.user.id} disabled email notifications")
+        if not user.notification_settings.receive_push:
+            logger.info(f"Push disabled for user {user.id}")
+            return False
+    except Exception:
         return False
 
-    from_email = settings.DEFAULT_FROM_EMAIL
-    if not from_email:
-        from_email = 'noreply@taskmentor.local'
-        logger.warning("DEFAULT_FROM_EMAIL not set, using fallback")
+    from core.models import PushSubscription
+    subscriptions = PushSubscription.objects.filter(user=user)
+    if not subscriptions.exists():
+        logger.info(f"No push subscriptions for user {user.id}")
+        return False
 
-    recipient_list = [task.user.email]
-    send_mail(subject, message, from_email, recipient_list)
-    logger.info(f"Email sent for task {task.id} to {task.user.email}")
-    return True
+    payload = {
+        'title': title,
+        'body': body,
+        'data': data or {},
+        'icon': '/static/images/icon.png',
+        'badge': '/static/images/badge.png'
+    }
 
-def send_task_creation_notification(task):
-    """Отправляет уведомление о создании задачи."""
-    subject = f'Новая задача: {task.title}'
-    message = f"""
-Здравствуйте!
+    # Получаем vapid claims
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@taskmentor.local')
+    vapid_claims = {'sub': f'mailto:{from_email}'}
 
-Вы создали задачу для клиента {task.client.name}.
-Название: {task.title}
-Описание: {task.description or 'нет'}
-Срок выполнения: {task.due_date.strftime('%d.%m.%Y %H:%M')}
-Приоритет: {task.get_priority_display()}
+    # Получаем приватный ключ
+    vapid_key = getattr(settings, 'VAPID_PRIVATE_KEY', None)
+    if not vapid_key:
+        logger.error("VAPID_PRIVATE_KEY not configured")
+        return False
 
-С уважением,
-TaskMentor
-"""
-    return _send_email(task, subject, message)
+    success_count = 0
+    for sub in subscriptions:
+        try:
+            webpush(
+                subscription_info={
+                    'endpoint': sub.endpoint,
+                    'keys': {
+                        'p256dh': sub.p256dh,
+                        'auth': sub.auth,
+                    }
+                },
+                data=json.dumps(payload),
+                vapid_private_key=vapid_key,
+                vapid_claims=vapid_claims
+            )
+            success_count += 1
+            logger.info(f'Push sent to {sub.endpoint}')
+        except WebPushException as e:
+            logger.error(f'Push failed for {sub.endpoint}: {e}')
+            # Удаляем устаревшие подписки (410 Gone)
+            if hasattr(e, 'response') and e.response and e.response.status_code == 410:
+                sub.delete()
+                logger.info(f'Removed stale subscription {sub.endpoint}')
+        except Exception as e:
+            logger.error(f'Unexpected error sending push to {sub.endpoint}: {e}')
 
-def send_task_reminder_notification(task):
-    """Отправляет напоминание о задаче за час до срока."""
-    subject = f'Напоминание: {task.title} (через час)'
-    message = f"""
-Здравствуйте!
+    return success_count > 0
 
-Напоминаем, что через час истекает срок задачи для клиента {task.client.name}.
-Название: {task.title}
-Описание: {task.description or 'нет'}
-Срок выполнения: {task.due_date.strftime('%d.%m.%Y %H:%M')}
-Приоритет: {task.get_priority_display()}
 
-Пожалуйста, не забудьте выполнить задачу.
-
-С уважением,
-TaskMentor
-"""
-    return _send_email(task, subject, message)
+def cleanup_stale_subscriptions(user):
+    """
+    Очищает устаревшие push-подписки пользователя.
+    Может вызываться периодически.
+    """
+    from core.models import PushSubscription
+    deleted_count, _ = PushSubscription.objects.filter(user=user).delete()
+    logger.info(f"Cleaned up {deleted_count} push subscriptions for user {user.id}")
+    return deleted_count

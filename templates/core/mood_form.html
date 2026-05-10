@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}Отметка настроения{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>Отметка настроения для {{ client.name }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="id_date" class="form-label">Дата</label>
+                        <input type="date" name="date" id="id_date" 
+                               class="form-control" 
+                               value="{{ form.date.value|default:''|date:'Y-m-d' }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="id_mood_score" class="form-label">Оценка настроения (1–10)</label>
+                        <input type="number" name="mood_score" id="id_mood_score" 
+                               class="form-control" 
+                               min="1" max="10" step="1"
+                               value="{{ form.mood_score.value|default:5 }}" required>
+                        <div class="form-text">1 – очень плохо, 10 – отлично</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="id_notes" class="form-label">Комментарий (необязательно)</label>
+                        <textarea name="notes" id="id_notes" 
+                                  class="form-control" rows="3">{{ form.notes.value|default:'' }}</textarea>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <a href="{% url 'core:client_detail' client.pk %}" class="btn btn-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

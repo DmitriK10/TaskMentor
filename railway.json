@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "schedule": "*/10 * * * *",
+      "command": "python manage.py send_task_reminders"
+    }
+  ]
+}

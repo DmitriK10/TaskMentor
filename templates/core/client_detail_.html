@@ -1,0 +1,58 @@
+{% extends 'base.html' %} {% load static %} {% block title %}{{ client.name }} – профиль клиента{% endblock %} {% block extra_head %} {% endblock %} {% block content %}
+{{ client.name|first|upper }}
+{{ client.name }}
+{{ client.email }}
+{{ completed_tasks|default:0 }}
+Выполнено
+{{ upcoming_tasks|length|default:0 }}
+В процессе
+Телефон: {{ client.phone|default:"—" }}
+
+Дата рождения: {{ client.birth_date|date:"d.m.Y"|default:"—" }}
+
+Заметки: {{ client.notes|default:"—"|truncatewords:20 }}
+
+Детали задач
+{{ task_progress_percent|default:0 }}%
+{% for task in upcoming_tasks|slice:":5" %}
+{{ task.title|truncatechars:30 }} {{ task.priority_display }}
+{% empty %}
+Нет предстоящих задач
+{% endfor %}
+📊 Настроение
+🎯 Цели
+📋 Все задачи
++ Отметить настроение + Цель
+Динамика настроения
+{% if mood_data %} 
+Средний балл за 30 дней: {{ average_mood|default:"—" }} (из 10)
+Последние записи:
+{% for entry in mood_entries|slice:":5" %}
+{{ entry.date|date:"d.m.Y" }} {% for i in "12345678910"|make_list %} {% if forloop.counter <= entry.mood_score %}⭐{% else %}☆{% endif %} {% endfor %} ({{ entry.mood_score }}/10) {% if entry.notes %} {{ entry.notes|truncatewords:10 }} {% endif %}
+{% empty %}
+Нет записей о настроении. Добавьте первую!
+{% endfor %}
+{% else %}
+Нет данных о настроении за последние 30 дней.
+
+Добавить первую отметку {% endif %}
+Цели клиента
+{% if goals %} {% for goal_item in goals %}
+{{ goal_item.goal.title }}
+{{ goal_item.goal.description|default:"—" }}
+
+{% if goal_item.goal.target_date %} Целевая дата: {{ goal_item.goal.target_date|date:"d.m.Y" }} {% endif %}
+{{ goal_item.completed_tasks }}/{{ goal_item.total_tasks }} задач
+✏️ 🗑️
+{{ goal_item.progress_percent }}%
+{% endfor %} {% else %}
+У клиента пока нет целей.
+
+Создать первую цель {% endif %}
+Все задачи клиента
+{% for task in all_tasks %} {% empty %} {% endfor %}
+Название	Срок	Приоритет	Цель	Действия
+{% csrf_token %} 
+{{ task.title }}	{{ task.due_date|date:"d.m.Y H:i" }}	{% if task.priority == 'high' %} Высокий {% elif task.priority == 'medium' %} Средний {% else %} Низкий {% endif %}	{{ task.goal.title|default:"—" }}	✏️ 🗑️
+Нет задач для этого клиента
+{% endblock %} {% block extra_js %} {% endblock %}

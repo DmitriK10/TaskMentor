@@ -5,27 +5,175 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card">
+    <div class="col-md-8">
+        <!-- Информация о пользователе -->
+        <div class="card mb-4">
             <div class="card-header">
                 <h4>Профиль пользователя</h4>
             </div>
             <div class="card-body">
-                <p><strong>Email:</strong> {{ user.email }}</p>
-                <p><strong>Имя пользователя:</strong> {{ user.username }}</p>
-                <p><strong>Дата регистрации:</strong> {{ user.date_joined|date:"d.m.Y H:i" }}</p>
-                <hr>
-                <h5>Настройки уведомлений</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Email:</strong> {{ user.email }}</p>
+                        <p><strong>Имя пользователя:</strong> {{ user.username }}</p>
+                        <p><strong>Дата регистрации:</strong> {{ user.date_joined|date:"d.m.Y H:i" }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-end">
+                            <div class="stat-card">
+                                <span class="stat-value">{{ total_clients|default:0 }}</span>
+                                <span class="stat-label">Клиентов</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Calendar -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar-event"></i> Google Calendar
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if user.google_token %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-success me-2">
+                                <i class="bi bi-check-circle"></i> Подключён
+                            </span>
+                            <small class="text-muted">
+                                Задачи синхронизируются автоматически
+                            </small>
+                        </div>
+                        <div>
+                            <a href="{% url 'core:google_auth' %}" class="btn btn-outline-warning btn-sm">
+                                <i class="bi bi-arrow-repeat"></i> Переподключить
+                            </a>
+                            <a href="{% url 'core:google_disconnect' %}" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-x-circle"></i> Отключить
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
+                        <p class="text-muted mt-2">
+                            Подключите Google Calendar для автоматической синхронизации задач
+                        </p>
+                        <a href="{% url 'core:google_auth' %}" class="btn btn-primary">
+                            <i class="bi bi-google"></i> Подключить Google Calendar
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Настройки уведомлений -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bell"></i> Настройки уведомлений
+                </h5>
+            </div>
+            <div class="card-body">
                 <form method="post">
                     {% csrf_token %}
-                    {{ form.as_p }}
-                    <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-primary">Сохранить</button>
-                        <a href="/" class="btn btn-secondary">Отмена</a>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" 
+                               id="id_receive_emails" 
+                               name="receive_emails"
+                               {% if form.receive_emails.value %}checked{% endif %}>
+                        <label class="form-check-label" for="id_receive_emails">
+                            <strong>Email-уведомления</strong>
+                            <small class="text-muted d-block">
+                                Получать уведомления о новых задачах и напоминания
+                            </small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" 
+                               id="id_receive_push" 
+                               name="receive_push"
+                               {% if form.receive_push.value %}checked{% endif %}>
+                        <label class="form-check-label" for="id_receive_push">
+                            <strong>Push-уведомления</strong>
+                            <small class="text-muted d-block">
+                                Мгновенные уведомления в браузере (требуется разрешение)
+                            </small>
+                        </label>
+                    </div>
+                    
+                    {% if not user.google_token %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Совет:</strong> Для полноценной работы включите оба типа уведомлений.
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Сохранить настройки
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
+
+        <!-- Push подписки -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-phone"></i> Активные устройства
+                </h5>
+            </div>
+            <div class="card-body">
+                {% with user.push_subscriptions.count as sub_count %}
+                    {% if sub_count > 0 %}
+                        <p>
+                            <span class="badge bg-primary">{{ sub_count }}</span>
+                            активных подписок на push-уведомления
+                        </p>
+                        <form method="post" action="{% url 'core:unsubscribe_all_push' %}" class="mt-2">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Вы уверены, что хотите отписаться от всех push-уведомлений?');">
+                                <i class="bi bi-bell-slash"></i> Отписаться от всех
+                            </button>
+                        </form>
+                        <small class="text-muted d-block mt-2">
+                            Push-уведомления будут отправляться на все подписанные устройства
+                        </small>
+                    {% else %}
+                        <p class="text-muted">
+                            У вас нет активных push-подписок
+                        </p>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </div>
     </div>
 </div>
+
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #FF8C00, #FFB347);
+        padding: 15px 25px;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+    }
+    .stat-value {
+        display: block;
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .stat-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+    }
+</style>
 {% endblock %}
